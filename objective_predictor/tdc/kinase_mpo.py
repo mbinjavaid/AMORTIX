@@ -1,0 +1,76 @@
+from tdc import Oracle
+
+
+class KinaseMPOObjective:
+    def __init__(self):
+        # Initialize the 4 components from TDC
+        # These load the specific Random Forest/Regression models used in the literature
+        self.gsk3 = Oracle(name='GSK3B')
+        self.jnk3 = Oracle(name='JNK3')
+        self.qed = Oracle(name='QED')
+        self.sa = Oracle(name='SA')
+
+    def score(self, smiles):
+        """
+        Returns the scalar reward for Reinforcement Learning (Sum of properties).
+        Range: [0.0, 1.0]
+        """
+        if not smiles:
+            return 0.0
+
+        # Get raw scores
+        # GSK3B and JNK3 return probabilities [0, 1]
+        gsk_score = self.gsk3(smiles)
+        jnk_score = self.jnk3(smiles)
+
+        # QED is [0, 1]
+        qed_score = self.qed(smiles)
+
+        # SA is [1, 10] where 1 is best. We normalize to [0, 1] where 1 is best.
+        raw_sa = self.sa(smiles)
+        sa_norm = (10 - raw_sa) / 9.0
+
+        # Compute RL Reward (Soft Signal)
+        reward = gsk_score + jnk_score + qed_score + sa_norm
+        reward = reward / 4.0 # Normalize to [0, 1]
+
+        return reward
+
+    def is_successful(self, smiles):
+        """
+        Strict Binary Evaluation for the 'Success Rate' metric.
+        Matches the definition in RationaleRL (Jin et al., 2020).
+        """
+        # try:
+        gsk = self.gsk3(smiles)
+        jnk = self.jnk3(smiles)
+        qed = self.qed(smiles)
+        sa = self.sa(smiles)
+
+        # The hard thresholds defined in the benchmark paper
+        return (gsk >= 0.5) and (jnk >= 0.5) and (qed >= 0.6) and (sa < 4.0)
+        # except:
+        #     return False
+
+    def individual_scores(self, smiles):
+        """
+        Returns individual component scores for analysis.
+        """
+        gsk = self.gsk3(smiles)
+        jnk = self.jnk3(smiles)
+        qed = self.qed(smiles)
+        sa = self.sa(smiles)
+        return {
+            "GSK3B": gsk,
+            "JNK3": jnk,
+            "QED": qed,
+            "SA": sa
+        }
+
+if __name__ == "__main__":
+    objective = KinaseMPOObjective()
+    test_smiles = "COc1ccc(-c2ccnc(Nc3ccccc3)n2)cn1"
+    # test_smiles = "Cc1cc(-c2ncncc2C[N+](C)(C)CC2CCC2)ccc1-c1ccnc(Nc2ccc(N3CCN(C)CC3)cc2)n1"
+    score = objective.score(test_smiles)
+    success = objective.is_successful(test_smiles)
+    print(f"Score: {score}, Successful: {success}")
