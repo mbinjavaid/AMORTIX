@@ -86,14 +86,6 @@ You can also override specific RL hyperparameters directly via the command line:
 
 `python main.py --learning_rate 1e-4 --rl_entropy_beta 0.001 --ppo_epochs 1 --rl_ppo_clip_epsilon 0.2`
 
-## **Supported Evaluation Tasks**
-
-The codebase natively supports the objective functions discussed in the paper:
-
-1. **Kinase Scaffold Decoration (Kinase MPO):** Multi-objective optimization targeting GSK3B and JNK3 activity, QED, and Synthetic Accessibility (SA).  
-2. **Prodrug Transfer:** Structural transformation targeting blood-brain barrier permeability (optimizing for Delta LogP, HBD masking, cleavability, and QED).  
-3. **PMO Benchmark:** De-novo generation tasks utilizing the standard PMO evaluation suite. **Note: To reproduce the PMO benchmark results, please use the `pmo` branch of this repository.**
-
 ## **Output**
 
 Results, model checkpoints, and logs are saved to the `results` directory by default:
