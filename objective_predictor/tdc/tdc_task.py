@@ -1,7 +1,6 @@
 from tdc import Oracle
 
-# Goal-directed tasks available as TDC oracles (the PMO benchmark tasks plus a few further TDC tasks).
-# "jnk3" and "kinase_mpo" have their own objective classes (see jnk.py, kinase_mpo.py).
+# Supported TDC oracle tasks ("jnk3" and "kinase_mpo" have their own classes).
 TDC_TASKS = [
     "albuterol_similarity", "amlodipine_mpo", "aripiprazole_similarity", "celecoxib_rediscovery", "deco_hop",
     "drd2", "fexofenadine_mpo", "gsk3b", "isomers_c11h24", "isomers_c7h8n2o2", "isomers_c9h10n2o2pf2cl",
@@ -10,7 +9,7 @@ TDC_TASKS = [
     "zaleplon_mpo",
 ]
 
-# Alternative names of tasks, mapped to the name of the TDC oracle.
+# Alternative task names
 TASK_ALIASES = {
     "median_camphor_menthol": "median1",
     "median_tadalafil_sildenafil": "median2",

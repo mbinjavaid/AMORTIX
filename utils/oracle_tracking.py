@@ -15,13 +15,8 @@ from rdkit import Chem, RDLogger
 
 def top10_auc(curve_points: Sequence[Tuple[int, float]], n_calls: int, max_budget: int = 10000,
               freq: int = 100) -> float:
-    """
-    Top-10 AUC from the step-function curve points [(unique_calls, top10_mean), ...] (first point must be (0, 0.0)).
-
-    The curve is evaluated on the grid 0, freq, 2*freq, ..., <= n_calls plus the exact point n_calls (holding the
-    previous value between points), then extended flat to `max_budget`, integrated with the trapezoidal rule and
-    divided by `max_budget`. Can be called at any time during a run.
-    """
+    """Top-10 AUC from curve points [(unique_calls, top10_mean), ...]: sampled every `freq` calls (trapezoidal rule),
+    extended flat to `max_budget` and divided by `max_budget`."""
     n_calls = min(int(n_calls), max_budget)
     if not curve_points:
         return 0.0

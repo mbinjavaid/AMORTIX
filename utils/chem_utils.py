@@ -7,11 +7,7 @@ from sklearn.ensemble import RandomForestRegressor
 
 
 class SurrogateModel:
-    """
-    A lightweight Random Forest Regressor acting as a cheap stand-in for the oracle.
-    It predicts the continuous objective score of a molecule from its Morgan fingerprint and is used to decide which of
-    the sampled molecules are worth spending real oracle calls on.
-    """
+    """Random forest on Morgan fingerprints that predicts the objective score of a molecule."""
 
     def __init__(self, n_jobs: int = -1):
         self.model = RandomForestRegressor(

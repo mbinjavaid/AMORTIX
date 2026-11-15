@@ -255,15 +255,10 @@ class MoleculeConfig:
         self.prodrug_parent_smiles = None  # Will be set during training
         self.prodrug_log_components = True  # Log individual components of prodrug objective
 
-        # Baseline / grouping:
-        #   use_grpo_grouping=True  -> GRPO: one baseline (group mean) per prompt, advantage = reward - group mean.
-        #   use_grpo_grouping=False -> REINFORCE: all trajectories of an epoch are pooled into one group, i.e. a single
-        #                              global batch-mean baseline.
-        # For plain REINFORCE additionally keep rl_advantage_normalize=False and ppo_epochs=1.
-        # With a single start prompt per epoch both settings give the same update.
+        # True: GRPO (one baseline per prompt). False: REINFORCE (one global baseline over all trajectories of an
+        # epoch); also keep rl_advantage_normalize=False and ppo_epochs=1.
         self.use_grpo_grouping = True  # If True, treats each parent as a separate group in GRPO
-        # Budget of unique molecules scored by the objective during training (training stops when it is used up).
-        # None = no limit. Every unique call is written to `oracle_history.csv` in the results directory.
+        # Budget of unique molecules scored by the objective; training stops when it is used up. None = no limit.
         self.max_oracle_calls = 50000
 
         # --- WandB Logging ---

@@ -234,11 +234,8 @@ class MoleculeObjectiveEvaluator:
         return all_objs
 
     def _score_with_ledger(self, feasible_idcs, feasible_molecules, feasible_smiles, molecule_designs) -> np.ndarray:
-        """
-        Scores through the shared oracle ledger (see utils/oracle_tracking.py): every unique molecule is scored once,
-        counted, written to the history and checked against the budget. For the prodrug objective the score depends on
-        the parent, so a molecule is unique per (parent, molecule).
-        """
+        """Scores through the shared oracle ledger (unique molecules only, budget, history). For the prodrug
+        objective, molecules are unique per (parent, molecule)."""
         use_context = getattr(self.config, 'objective_type', '') == 'prodrug_bbb'
         items = []
         for idx, smi in zip(feasible_idcs, feasible_smiles):

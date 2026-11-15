@@ -152,10 +152,8 @@ class GumbeldoreDataset:
                 intermediate states in the search tree are not stored after transitioning from them, only their
                 policies.
             prompts: [List[str], optional] List of SMILES strings to use as prompts in Prodrug mode.
-            surrogate_filter: [dict, optional] Only for search_type "iid_mc": {"model": SurrogateModel, "num_keep": int}.
-                Of the sampled molecules per start instance, only `num_keep` unique ones (ranked by the surrogate's
-                predicted objective, or simply the first ones while the surrogate is not fitted) are evaluated with
-                the objective; the others are discarded.
+            surrogate_filter: [dict, optional] For "iid_mc": {"model": SurrogateModel, "num_keep": int}. Only
+                `num_keep` of the sampled molecules per start instance, chosen by the surrogate, are evaluated.
 
         Behavior:
             - If config.use_dr_grpo is False: returns metrics dict (original behavior).
@@ -466,8 +464,7 @@ def async_sbs_worker(config: Config, job_pool: JobPool, network_weights: dict,
         return objs
 
     def select_and_evaluate(candidates: List[MoleculeDesign], model, num_keep: int) -> List[MoleculeDesign]:
-        """Evaluates only `num_keep` of the candidates: the first ones if the surrogate is not fitted yet, otherwise
-        the unique candidates with the highest surrogate-predicted objective."""
+        """Evaluates `num_keep` candidates: the first ones if the surrogate is not fitted, else the best-ranked."""
         if not candidates:
             return []
         if not model.is_fitted:
