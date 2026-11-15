@@ -13,10 +13,10 @@ has at least 50 unique scored molecules); only these are evaluated with the orac
 Examples
 --------
     python scripts/run_pmo.py --list_tasks
-    python scripts/run_pmo.py --task qed --run_id 1                       # one run, W&B + CSV logging
-    python scripts/run_pmo.py --task qed --run_id 1 --no_wandb --gpu 0    # CSV logging only, on GPU 0
-    python scripts/run_pmo.py --tasks drd2,jnk3,gsk3b --runs 3            # several tasks, 3 seeded runs each
-    python scripts/run_pmo.py --tasks all --runs 3                        # the whole task table below
+    python scripts/run_pmo.py                                             # all tasks, 3 seeded runs each
+    python scripts/run_pmo.py --tasks drd2,jnk3,gsk3b --no_wandb --gpu 0  # several tasks, CSV logging only, GPU 0
+    python scripts/run_pmo.py --task qed --runs 1                         # one task, one run
+    python scripts/run_pmo.py --task qed --run_id 2                       # exactly run 2 of one task (seed 42 + 2)
 
 Outputs (per run, in `<results_root>/<task>/run_<id>/`)
     oracle_history.csv     every unique oracle call: call_id, smiles, score
@@ -46,31 +46,13 @@ import subprocess
 import sys
 import time
 
-# Entropy bonus (`rl_entropy_beta`) used per task.
-TASK_ENTROPY = {
-    "albuterol_similarity": 0.002,
-    "amlodipine_mpo": 0.0,
-    "celecoxib_rediscovery": 0.001,
-    "deco_hop": 0.0,
-    "drd2": 0.0,
-    "fexofenadine_mpo": 0.0,
-    "gsk3b": 0.001,
-    "isomers_c7h8n2o2": 0.002,
-    "isomers_c9h10n2o2pf2cl": 0.0,
-    "jnk3": 0.0,
-    "median1": 0.001,
-    "median2": 0.0,
-    "mestranol_similarity": 0.001,
-    "osimertinib_mpo": 0.0,
-    "perindopril_mpo": 0.001,
-    "qed": 0.001,
-    "ranolazine_mpo": 0.0,
-    "scaffold_hop": 0.0,
-    "sitagliptin_mpo": 0.0,
-    "thiothixene_rediscovery": 0.001,
-    "troglitazone_rediscovery": 0.0,
-    "zaleplon_mpo": 0.001,
-}
+# Tasks run by default (TDC oracle names).
+PMO_TASKS = [
+    "albuterol_similarity", "amlodipine_mpo", "celecoxib_rediscovery", "deco_hop", "drd2", "fexofenadine_mpo",
+    "gsk3b", "isomers_c7h8n2o2", "isomers_c9h10n2o2pf2cl", "jnk3", "median1", "median2", "mestranol_similarity",
+    "osimertinib_mpo", "perindopril_mpo", "qed", "ranolazine_mpo", "scaffold_hop", "sitagliptin_mpo",
+    "thiothixene_rediscovery", "troglitazone_rediscovery", "zaleplon_mpo",
+]
 
 EPOCH_LOG_FIELDS = ["epoch", "unique_calls", "new_calls", "top10_avg", "pmo_auc", "best_score", "mean_reward",
                     "policy_loss", "mean_entropy", "rl_entropy_beta", "num_trajectories", "elapsed_s"]
@@ -78,10 +60,12 @@ EPOCH_LOG_FIELDS = ["epoch", "unique_calls", "new_calls", "top10_avg", "pmo_auc"
 
 def parse_args():
     p = argparse.ArgumentParser(description="PMO-style benchmark runner")
-    p.add_argument("--task", help="TDC oracle name, e.g. qed, drd2, jnk3 (see --list_tasks)")
-    p.add_argument("--tasks", help="Comma-separated task names or 'all'. Runs every task for --runs seeds.")
-    p.add_argument("--runs", type=int, default=3, help="Number of seeded runs per task when using --tasks.")
-    p.add_argument("--run_id", type=int, default=1, help="Run index; the seed is --seed_base + run_id.")
+    p.add_argument("--task", help="Run only this task (TDC oracle name, e.g. qed, drd2, jnk3; see --list_tasks).")
+    p.add_argument("--tasks", default="all",
+                   help="Comma-separated task names or 'all' (default). Every task is run for --runs seeds.")
+    p.add_argument("--runs", type=int, default=3, help="Number of seeded runs per task (default 3).")
+    p.add_argument("--run_id", type=int, default=None,
+                   help="Run only this single run (use together with --task); the seed is --seed_base + run_id.")
     p.add_argument("--seed_base", type=int, default=42)
     p.add_argument("--max_calls", type=int, default=10000, help="Oracle budget (unique molecules).")
     p.add_argument("--max_epochs", type=int, default=100000, help="Safety cap on the number of epochs.")
@@ -93,7 +77,7 @@ def parse_args():
     p.add_argument("--no_surrogate", action="store_true",
                    help="Disable surrogate filtering: all sampled molecules are evaluated with the oracle.")
     p.add_argument("--surrogate_n_jobs", type=int, default=-1, help="CPU threads of the surrogate random forest.")
-    p.add_argument("--entropy", type=float, default=None, help="Entropy bonus. Default: per-task value from TASK_ENTROPY.")
+    p.add_argument("--entropy", type=float, default=0.0, help="Entropy bonus coefficient (default 0).")
     p.add_argument("--lr", type=float, default=None, help="Learning rate. Default: value from config.py.")
     p.add_argument("--stall_threshold", type=int, default=None,
                    help="If fewer than this many new unique molecules were scored over the last 10 epochs, the "
@@ -112,7 +96,12 @@ def parse_args():
 
 def launch_many(args):
     """Run every (task, run_id) as a separate process so that each run starts from a clean state."""
-    tasks = list(TASK_ENTROPY) if args.tasks == "all" else [t.strip() for t in args.tasks.split(",") if t.strip()]
+    if args.task:
+        tasks = [args.task]
+    elif args.tasks == "all":
+        tasks = list(PMO_TASKS)
+    else:
+        tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
     passthrough = []
     for flag, val in [("--seed_base", args.seed_base), ("--max_calls", args.max_calls), ("--max_epochs", args.max_epochs),
                       ("--samples_per_epoch", args.samples_per_epoch), ("--keep_per_epoch", args.keep_per_epoch),
@@ -159,7 +148,7 @@ def run_single(args):
 
     task = args.task
     seed = args.seed_base + args.run_id
-    entropy = args.entropy if args.entropy is not None else TASK_ENTROPY.get(task, 0.0)
+    entropy = args.entropy
     run_dir = os.path.join(args.results_root, task, f"run_{args.run_id}")
     os.makedirs(run_dir, exist_ok=True)
 
@@ -354,12 +343,8 @@ def run_single(args):
 if __name__ == "__main__":
     args = parse_args()
     if args.list_tasks:
-        for t, e in TASK_ENTROPY.items():
-            print(f"{t}\tentropy={e}")
-    elif args.tasks:
-        launch_many(args)
-    elif args.task:
+        print("\n".join(PMO_TASKS))
+    elif args.task and args.run_id is not None:
         run_single(args)
     else:
-        print("Give --task, --tasks or --list_tasks.")
-        sys.exit(1)
+        launch_many(args)
