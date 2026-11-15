@@ -1,38 +1,15 @@
 """
-PMO-style benchmark runner (practical molecular optimization, 10,000 unique oracle calls, top-10 AUC).
+PMO-style benchmark runner: fine-tunes the pre-trained model on a TDC oracle task with a budget of unique oracle calls
+and logs the top-10 AUC.
 
-The pre-trained model is fine-tuned with policy-gradient updates (see `rl_updates.dr_grpo_update`) while every molecule
-is scored through one shared oracle (`utils.oracle_tracking.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
-oracle budget and tracks the top-10 AUC. Generation starts from the single carbon atom "C".
-
-Each epoch draws `--samples_per_epoch` (128) IID samples from the policy. A random-forest surrogate trained on all
-molecules scored so far picks the `--keep_per_epoch` (10) most promising unique ones (random ones until the surrogate
-has at least 50 unique scored molecules); only these are evaluated with the oracle and used for the policy update.
-`--no_surrogate` evaluates all samples instead.
-
-Examples
---------
+    python scripts/run_pmo.py                                   # all tasks, seeds 42 43 44
+    python scripts/run_pmo.py --tasks qed,drd2 --seeds 42       # selected tasks and seeds
     python scripts/run_pmo.py --list_tasks
-    python scripts/run_pmo.py                                             # all tasks, 3 seeded runs each
-    python scripts/run_pmo.py --tasks drd2,jnk3,gsk3b --no_wandb --gpu 0  # several tasks, CSV logging only, GPU 0
-    python scripts/run_pmo.py --task qed --runs 1                         # one task, one run
-    python scripts/run_pmo.py --task qed --run_id 2                       # exactly run 2 of one task (seed 42 + 2)
 
-Outputs (per run, in `<results_root>/<task>/run_<id>/`)
-    oracle_history.csv     every unique oracle call: call_id, smiles, score
-    pmo_top10_curve.csv    top-10 mean every time it changed: unique_calls, top10_avg, top10_smiles_scores
-    pmo_epoch_log.csv      one row per epoch: unique calls, top-10 mean, top-10 AUC, best score, RL metrics
-    pmo_summary.csv        final numbers of the run (also appended to `<results_root>/pmo_summary_all.csv`)
-W&B (unless --no_wandb): the same per-epoch quantities, with `pmo_auc` being the top-10 AUC (flat extension of the
-current top-10 mean up to the full budget).
-
-REINFORCE / group notes
------------------------
-Every epoch uses a single start prompt ("C"), so there is exactly one group and the group-relative baseline equals
-the batch-mean baseline, i.e. plain REINFORCE with a mean baseline. For multi-prompt training (`main.py` with
-`use_fragment_library=True`) set `use_grpo_grouping=False` in `config.py` to pool all prompts into one group (global
-baseline, REINFORCE) instead of one baseline per prompt (GRPO). Keep `rl_advantage_normalize=False` and
-`ppo_epochs=1` for the plain REINFORCE update.
+Each epoch samples `--samples_per_epoch` molecules from "C"; a random-forest surrogate selects `--keep_per_epoch` of
+them for oracle evaluation (`--no_surrogate`: evaluate all). Results per run are written to
+`<results_root>/<task>/seed_<seed>/` (oracle_history.csv, pmo_top10_curve.csv, pmo_epoch_log.csv, pmo_summary.csv)
+and to W&B unless `--no_wandb` is given.
 """
 import os
 import sys
@@ -60,13 +37,8 @@ EPOCH_LOG_FIELDS = ["epoch", "unique_calls", "new_calls", "top10_avg", "pmo_auc"
 
 def parse_args():
     p = argparse.ArgumentParser(description="PMO-style benchmark runner")
-    p.add_argument("--task", help="Run only this task (TDC oracle name, e.g. qed, drd2, jnk3; see --list_tasks).")
-    p.add_argument("--tasks", default="all",
-                   help="Comma-separated task names or 'all' (default). Every task is run for --runs seeds.")
-    p.add_argument("--runs", type=int, default=3, help="Number of seeded runs per task (default 3).")
-    p.add_argument("--run_id", type=int, default=None,
-                   help="Run only this single run (use together with --task); the seed is --seed_base + run_id.")
-    p.add_argument("--seed_base", type=int, default=42)
+    p.add_argument("--tasks", default="all", help="Comma-separated TDC task names, or 'all' (default).")
+    p.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44], help="Seeds to run for every task.")
     p.add_argument("--max_calls", type=int, default=10000, help="Oracle budget (unique molecules).")
     p.add_argument("--max_epochs", type=int, default=100000, help="Safety cap on the number of epochs.")
     p.add_argument("--samples_per_epoch", type=int, default=128,
@@ -94,16 +66,10 @@ def parse_args():
     return p.parse_args()
 
 
-def launch_many(args):
-    """Run every (task, run_id) as a separate process so that each run starts from a clean state."""
-    if args.task:
-        tasks = [args.task]
-    elif args.tasks == "all":
-        tasks = list(PMO_TASKS)
-    else:
-        tasks = [t.strip() for t in args.tasks.split(",") if t.strip()]
+def launch_many(args, tasks):
+    """Run every (task, seed) as a separate process."""
     passthrough = []
-    for flag, val in [("--seed_base", args.seed_base), ("--max_calls", args.max_calls), ("--max_epochs", args.max_epochs),
+    for flag, val in [("--max_calls", args.max_calls), ("--max_epochs", args.max_epochs),
                       ("--samples_per_epoch", args.samples_per_epoch), ("--keep_per_epoch", args.keep_per_epoch),
                       ("--surrogate_n_jobs", args.surrogate_n_jobs),
                       ("--entropy", args.entropy), ("--lr", args.lr), ("--stall_threshold", args.stall_threshold),
@@ -117,19 +83,19 @@ def launch_many(args):
             passthrough.append(flag)
 
     for task in tasks:
-        for run_id in range(1, args.runs + 1):
-            print(f"\n{'=' * 60}\nTASK {task} | RUN {run_id}/{args.runs}\n{'=' * 60}\n", flush=True)
-            cmd = [sys.executable, os.path.abspath(__file__), "--task", task, "--run_id", str(run_id)] + passthrough
+        for seed in args.seeds:
+            print(f"\n{'=' * 60}\nTASK {task} | SEED {seed}\n{'=' * 60}\n", flush=True)
+            cmd = [sys.executable, os.path.abspath(__file__), "--tasks", task, "--seeds", str(seed)] + passthrough
             try:
                 subprocess.run(cmd, check=True)
             except subprocess.CalledProcessError as e:
-                print(f"!! run failed (task={task}, run={run_id}): {e}", flush=True)
+                print(f"!! run failed (task={task}, seed={seed}): {e}", flush=True)
             except KeyboardInterrupt:
                 print("\nInterrupted.")
                 return
 
 
-def run_single(args):
+def run_single(args, task, seed):
     os.environ["RAY_EXPERIMENTAL_NOSET_CUDA_VISIBLE_DEVICES"] = "1"  # keep the GPU visible inside ray workers
     if args.gpu is not None:  # must happen before torch / ray are imported
         os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
@@ -146,10 +112,8 @@ def run_single(args):
     from utils.chem_utils import SurrogateModel
     from rl_updates import dr_grpo_update
 
-    task = args.task
-    seed = args.seed_base + args.run_id
     entropy = args.entropy
-    run_dir = os.path.join(args.results_root, task, f"run_{args.run_id}")
+    run_dir = os.path.join(args.results_root, task, f"seed_{seed}")
     os.makedirs(run_dir, exist_ok=True)
 
     # ---- configuration -------------------------------------------------------------------------------------------
@@ -166,7 +130,7 @@ def run_single(args):
     config.repeat_start_instances = 1
 
     config.use_dr_grpo = True
-    config.use_grpo_grouping = True  # one prompt per epoch -> one group (identical to REINFORCE with a mean baseline)
+    config.use_grpo_grouping = True
     config.rl_advantage_normalize = False
     config.ppo_epochs = 1
     config.rl_entropy_beta = entropy
@@ -177,8 +141,7 @@ def run_single(args):
     if args.checkpoint is not None:
         config.load_checkpoint_from_path = args.checkpoint
 
-    # Only the selected GPU is used: after CUDA_VISIBLE_DEVICES=<id> it appears as cuda:0 (the rollout workers
-    # re-apply config.CUDA_VISIBLE_DEVICES, because ray hides the GPUs from tasks that do not request one).
+    # The selected GPU appears as cuda:0
     if args.gpu is not None:
         config.CUDA_VISIBLE_DEVICES = str(args.gpu)
         config.training_device = "cuda:0"
@@ -199,8 +162,8 @@ def run_single(args):
     use_wandb = not args.no_wandb
     if use_wandb:
         import wandb
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=f"{task}_run{args.run_id}_seed{seed}",
-                   config=dict(task=task, run_id=args.run_id, seed=seed, max_calls=args.max_calls, entropy=entropy,
+        wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=f"{task}_seed{seed}",
+                   config=dict(task=task, seed=seed, max_calls=args.max_calls, entropy=entropy,
                                lr=config.optimizer["lr"], search_type="iid_mc",
                                samples_per_epoch=args.samples_per_epoch, keep_per_epoch=args.keep_per_epoch,
                                surrogate=not args.no_surrogate, stall_threshold=args.stall_threshold,
@@ -232,8 +195,7 @@ def run_single(args):
                                  weight_decay=config.optimizer["weight_decay"])
     dataset = GumbeldoreDataset(config=config, objective_evaluator=None, central_oracle=oracle)
 
-    # Surrogate: a random forest on the molecules scored so far. Of the samples drawn each epoch only `keep_per_epoch`
-    # are evaluated with the oracle: the ones the surrogate ranks highest (random ones until it has enough data).
+    # Surrogate for selecting which of the sampled molecules are evaluated with the oracle
     surrogate = None if args.no_surrogate else SurrogateModel(n_jobs=args.surrogate_n_jobs)
     surrogate_buffer = {"smiles": [], "scores": []}
     stall_threshold = args.stall_threshold if args.stall_threshold is not None else args.keep_per_epoch
@@ -314,7 +276,7 @@ def run_single(args):
     # ---- final summary -------------------------------------------------------------------------------------------
     stats = ray.get(oracle.get_stats.remote())
     summary = {
-        "task": task, "run_id": args.run_id, "seed": seed, "epochs": epoch,
+        "task": task, "seed": seed, "epochs": epoch - 1 if stop_reason != "max_epochs" else epoch,
         "unique_calls": stats["unique_calls"], "max_calls": args.max_calls,
         "top10_auc": stats["pmo_auc"], "top10_avg_final": stats["top10_avg"], "best_score": stats["best_score"],
         "stop_reason": stop_reason, "wall_clock_s": round(time.time() - start_time, 1),
@@ -331,7 +293,7 @@ def run_single(args):
             w.writeheader()
         w.writerow(summary)
 
-    print(f">> Final: task={task} run={args.run_id} calls={stats['unique_calls']} top10_auc={stats['pmo_auc']:.4f} "
+    print(f">> Final: task={task} seed={seed} calls={stats['unique_calls']} top10_auc={stats['pmo_auc']:.4f} "
           f"(stop: {stop_reason})")
     if use_wandb:
         wandb.summary.update({"top10_auc": stats["pmo_auc"], "top10_avg_final": stats["top10_avg"],
@@ -344,7 +306,9 @@ if __name__ == "__main__":
     args = parse_args()
     if args.list_tasks:
         print("\n".join(PMO_TASKS))
-    elif args.task and args.run_id is not None:
-        run_single(args)
+        sys.exit(0)
+    tasks = list(PMO_TASKS) if args.tasks == "all" else [t.strip() for t in args.tasks.split(",") if t.strip()]
+    if len(tasks) == 1 and len(args.seeds) == 1:
+        run_single(args, tasks[0], args.seeds[0])
     else:
-        launch_many(args)
+        launch_many(args, tasks)

@@ -1,22 +1,9 @@
 """
-Oracle bookkeeping: unique-call counting, budget, per-call history and top-10 AUC.
+Oracle bookkeeping: counts unique oracle calls (by canonical SMILES), enforces a budget, writes every call to
+`oracle_history.csv` and tracks the top-10 mean (`pmo_top10_curve.csv`) and its AUC over oracle calls.
 
-Rules implemented here:
-  * Molecules are identified by their canonical SMILES (plus, for context-dependent objectives, the canonical SMILES
-    of their context, e.g. the parent molecule). Only *unique* molecules consume budget and are scored once.
-  * Invalid SMILES, empty SMILES and the trivial molecule "C" are not counted and get -inf.
-  * Once `max_budget` unique molecules have been scored, every new molecule gets -inf (`max_budget=None`: no limit).
-  * Every unique call is appended to `oracle_history.csv`. Whenever a new molecule enters the running top-10, the pair
-    (unique_calls, mean of current top-10) is stored (`pmo_top10_curve.csv`). These pairs form a step function.
-  * The top-10 AUC is the area under that step function, sampled every `freq` calls (trapezoidal rule), extended flat
-    up to `max_budget` and divided by `max_budget`. For `max_budget=10000` and `freq=100` this matches
-    `top_auc(buffer, 10, finish=True, freq_log=100, max_oracle_calls=10000)` of the PMO benchmark (mol_opt).
-
-`OracleLedger` holds all logic and has no Ray / TDC dependency. Scoring is separate from bookkeeping:
-`lookup` says which molecules of a batch still need to be scored, `record` stores their scores.
-  * `OracleTracker` is the Ray actor around a ledger, used by `main.py` / the rollout workers, which score the
-    molecules themselves (see `MoleculeObjectiveEvaluator`).
-  * `PMOOracleCore` / `CentralOracle` add scoring with a given function (a TDC oracle), used by the PMO runner.
+`OracleLedger` is the pure-python core, `OracleTracker` its Ray actor (used by `main.py`). `CentralOracle` additionally
+scores with a TDC oracle (used by the PMO runner).
 """
 import csv
 import os
