@@ -15,7 +15,6 @@ from objective_predictor.GH_GNN_IDAC.src.models.GHGNN_architecture import GHGNN
 from objective_predictor.Prodrug.bbb_obj import BBBObjective
 from objective_predictor.tdc.jnk import JNK3Objective
 from objective_predictor.tdc.kinase_mpo import KinaseMPOObjective
-from objective_predictor.tdc.guacamol_hard import GuacaMolHardObjective
 from objective_predictor.tdc.tdc_task import TDCTaskObjective, TDC_TASKS, resolve_task_name
 
 
@@ -189,10 +188,6 @@ class MoleculeObjectiveEvaluator:
         if getattr(self.config, 'objective_type', '') == 'kinase_mpo':
             self.kinase_mpo_objective = KinaseMPOObjective()
 
-        if 'guacamol' in getattr(self.config, 'objective_type', ''):
-            task_name = self.config.objective_type.replace('guacamol_', '')
-            self.guacamol_objective = GuacaMolHardObjective(task_name=task_name)
-
         # Other TDC oracle tasks (e.g., celecoxib_rediscovery, zaleplon_mpo, qed)
         if resolve_task_name(getattr(self.config, 'objective_type', '')) in TDC_TASKS:
             self.tdc_task_objective = TDCTaskObjective(self.config.objective_type)
@@ -333,12 +328,6 @@ class MoleculeObjectiveEvaluator:
         elif getattr(self.config, 'objective_type', '') == 'kinase_mpo':
             objs = np.array([
                 self.kinase_mpo_objective.score(Chem.MolToSmiles(rdkit_mol))
-                for rdkit_mol in feasible_molecules
-            ])
-
-        elif 'guacamol' in getattr(self.config, 'objective_type', ''):
-            objs = np.array([
-                self.guacamol_objective.score(Chem.MolToSmiles(rdkit_mol))
                 for rdkit_mol in feasible_molecules
             ])
 
