@@ -1,6 +1,6 @@
 """
 Oracle bookkeeping: counts unique oracle calls (by canonical SMILES), enforces a budget, writes every call to
-`oracle_history.csv` and tracks the top-10 mean (`pmo_top10_curve.csv`) and its AUC over oracle calls.
+`oracle_history.csv` and tracks the top-10 mean (`top10_curve.csv`) and its AUC over oracle calls.
 
 `OracleLedger` is the pure-python core, `OracleTracker` its Ray actor (used by `main.py`). `CentralOracle` additionally
 scores with a TDC oracle (used by the PMO runner).
@@ -72,7 +72,7 @@ def canonical_key(item: Item) -> Optional[Tuple[str, Optional[str]]]:
 
 class OracleLedger:
     HISTORY_FILE = "oracle_history.csv"
-    TOP10_FILE = "pmo_top10_curve.csv"
+    TOP10_FILE = "top10_curve.csv"
 
     def __init__(self, results_dir: Optional[str] = None, max_budget: Optional[int] = 10000, freq: int = 100):
         RDLogger.DisableLog('rdApp.*')

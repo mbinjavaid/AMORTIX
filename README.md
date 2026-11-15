@@ -105,6 +105,6 @@ Results, model checkpoints, and logs are saved to the `results` directory by def
 * CSV logs generated during evaluation (`<validation|test>_detailed_logs.csv`), containing starting SMILES, generated SMILES, and objective scores.
 * Text files logging the top generated molecules per epoch (`epoch_<n>_train_top_20_molecules.txt`) and the best molecules found overall (`top10_all_time_smiles.txt`).
 * `oracle_history.csv`: every unique molecule scored during training (canonical SMILES, in the order of the oracle calls) with its score. Duplicates are scored and counted only once.
-* `pmo_top10_curve.csv`: the mean of the current top-10 scores each time it changed, together with the number of unique oracle calls so far.
+* `top10_curve.csv`: the mean of the current top-10 scores each time it changed, together with the number of unique oracle calls so far.
 
 If `use_wandb` is enabled, per-epoch training metrics (e.g., rewards, advantages, policy loss, number of unique oracle calls, top-10 mean and top-10 AUC over oracle calls) and validation scores are logged to the W&B project set by `wandb_project` / `wandb_entity` in `config.py`.

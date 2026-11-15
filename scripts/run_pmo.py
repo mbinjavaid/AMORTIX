@@ -8,7 +8,7 @@ and logs the top-10 AUC.
 
 Each epoch samples `--samples_per_epoch` molecules from "C"; a random-forest surrogate selects `--keep_per_epoch` of
 them for oracle evaluation (`--no_surrogate`: evaluate all). Results per run are written to
-`<results_root>/<task>/seed_<seed>/` (oracle_history.csv, pmo_top10_curve.csv, pmo_epoch_log.csv, pmo_summary.csv)
+`<results_root>/<task>/seed_<seed>/` (oracle_history.csv, top10_curve.csv, pmo_epoch_log.csv, pmo_summary.csv)
 and to W&B unless `--no_wandb` is given.
 """
 import os
