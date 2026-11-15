@@ -85,7 +85,7 @@ def _run_case(n_unique, with_ties, seed, max_budget=10000):
                 seq.append("")
         for i in range(0, len(seq), 7):  # arbitrary batching
             core.predict_batch(seq[i:i + 7])
-        auc = core.get_current_pmo_score()
+        auc = core.get_top10_auc()
         buffer = {smi: [sc, i + 1] for i, (smi, sc) in enumerate(core.global_cache.items())}
         return core, auc, buffer
 
@@ -122,7 +122,7 @@ def test_full_budget_of_10000():
         assert core.unique_calls == 10000 and core.budget_exceeded
         buffer = {smi: [sc, i + 1] for i, (smi, sc) in enumerate(core.global_cache.items())}
         ref = reference_top_auc(buffer, 10, True, 100, 10000)
-        assert abs(core.get_current_pmo_score() - ref) < 1e-9
+        assert abs(core.get_top10_auc() - ref) < 1e-9
 
 
 def test_lookup_record_flow_with_context_duplicates_and_race():
@@ -152,7 +152,7 @@ def test_lookup_record_flow_with_context_duplicates_and_race():
 def test_no_budget_ledger_auc_uses_calls_so_far():
     led = OracleLedger(None, max_budget=None)
     led.record(["CCO", "CCN"], [0.5, 0.7])
-    assert led.unique_calls == 2 and led.get_current_pmo_score() > 0
+    assert led.unique_calls == 2 and led.get_top10_auc() > 0
 
 
 def test_trivial_and_invalid_not_counted():
@@ -177,7 +177,7 @@ def test_csv_history_reproduces_auc():
         with open(os.path.join(d, "oracle_history.csv")) as f:
             rows = list(csv.DictReader(f))
         buffer = {r["smiles"]: [float(r["score"]), int(r["call_id"])] for r in rows}
-        assert abs(reference_top_auc(buffer, 10, True, 100, 10000) - core.get_current_pmo_score()) < 1e-9
+        assert abs(reference_top_auc(buffer, 10, True, 100, 10000) - core.get_top10_auc()) < 1e-9
 
 
 def test_top10_auc_function_flat_tail():

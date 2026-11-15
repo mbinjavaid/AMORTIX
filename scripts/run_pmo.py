@@ -31,7 +31,7 @@ PMO_TASKS = [
     "thiothixene_rediscovery", "troglitazone_rediscovery", "zaleplon_mpo",
 ]
 
-EPOCH_LOG_FIELDS = ["epoch", "unique_calls", "new_calls", "top10_avg", "pmo_auc", "best_score", "mean_reward",
+EPOCH_LOG_FIELDS = ["epoch", "unique_calls", "new_calls", "top10_avg", "top10_auc", "best_score", "mean_reward",
                     "policy_loss", "mean_entropy", "rl_entropy_beta", "num_trajectories", "elapsed_s"]
 
 
@@ -257,7 +257,7 @@ def run_single(args, task, seed):
             "unique_calls": stats["unique_calls"],
             "new_calls": new_calls,
             "top10_avg": stats["top10_avg"],
-            "pmo_auc": stats["pmo_auc"],
+            "top10_auc": stats["top10_auc"],
             "best_score": stats["best_score"],
             "mean_reward": metrics.get("mean_reward", float("nan")),
             "policy_loss": metrics.get("policy_loss", float("nan")),
@@ -271,14 +271,14 @@ def run_single(args, task, seed):
         if use_wandb:
             wandb.log({k: v for k, v in row.items() if k != "epoch"}, step=epoch)
         print(f">> epoch {epoch} | calls {stats['unique_calls']}/{args.max_calls} | top10 {stats['top10_avg']:.4f} | "
-              f"AUC {stats['pmo_auc']:.4f} | best {stats['best_score']:.4f}", flush=True)
+              f"AUC {stats['top10_auc']:.4f} | best {stats['best_score']:.4f}", flush=True)
 
     # ---- final summary -------------------------------------------------------------------------------------------
     stats = ray.get(oracle.get_stats.remote())
     summary = {
         "task": task, "seed": seed, "epochs": epoch - 1 if stop_reason != "max_epochs" else epoch,
         "unique_calls": stats["unique_calls"], "max_calls": args.max_calls,
-        "top10_auc": stats["pmo_auc"], "top10_avg_final": stats["top10_avg"], "best_score": stats["best_score"],
+        "top10_auc": stats["top10_auc"], "top10_avg_final": stats["top10_avg"], "best_score": stats["best_score"],
         "stop_reason": stop_reason, "wall_clock_s": round(time.time() - start_time, 1),
     }
     with open(os.path.join(run_dir, "pmo_summary.csv"), "w", newline="") as f:
@@ -293,10 +293,10 @@ def run_single(args, task, seed):
             w.writeheader()
         w.writerow(summary)
 
-    print(f">> Final: task={task} seed={seed} calls={stats['unique_calls']} top10_auc={stats['pmo_auc']:.4f} "
+    print(f">> Final: task={task} seed={seed} calls={stats['unique_calls']} top10_auc={stats['top10_auc']:.4f} "
           f"(stop: {stop_reason})")
     if use_wandb:
-        wandb.summary.update({"top10_auc": stats["pmo_auc"], "top10_avg_final": stats["top10_avg"],
+        wandb.summary.update({"top10_auc": stats["top10_auc"], "top10_avg_final": stats["top10_avg"],
                               "best_score": stats["best_score"], "unique_calls": stats["unique_calls"]})
         wandb.finish()
     ray.shutdown()

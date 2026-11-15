@@ -1154,7 +1154,7 @@ if __name__ == '__main__':
 
             oracle_stats = ray.get(oracle_tracker.get_stats.remote())
             print("Num Unique Oracle Calls so far: ", generated_loggable_dict["num_unique_oracle_calls"],
-                  "| top-10 avg: ", oracle_stats["top10_avg"], "| top-10 AUC: ", oracle_stats["pmo_auc"])
+                  "| top-10 avg: ", oracle_stats["top10_avg"], "| top-10 AUC: ", oracle_stats["top10_auc"])
 
             # --- [NEW] VALIDATION STEP ---
             current_val_mean_score = float("-inf")
@@ -1244,7 +1244,7 @@ if __name__ == '__main__':
 
                 wandb_log["num_unique_oracle_calls"] = generated_loggable_dict["num_unique_oracle_calls"]
                 wandb_log["oracle_top10_avg"] = oracle_stats["top10_avg"]
-                wandb_log["oracle_top10_auc"] = oracle_stats["pmo_auc"]
+                wandb_log["oracle_top10_auc"] = oracle_stats["top10_auc"]
                 wandb_log["oracle_best_score"] = oracle_stats["best_score"]
 
                 if use_validation:

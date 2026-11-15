@@ -126,7 +126,7 @@ class OracleLedger:
             return float("-inf")
         return max(x[0] for x in self.all_valid_molecules)
 
-    def get_current_pmo_score(self) -> float:
+    def get_top10_auc(self) -> float:
         """Top-10 AUC so far (flat extension to the budget; without a budget: normalised by the calls so far)."""
         budget = self.max_budget if self.max_budget != float("inf") else max(self.unique_calls, 1)
         return top10_auc(self.auc_curve_points, self.unique_calls, budget, self.freq)
@@ -143,7 +143,7 @@ class OracleLedger:
             "budget_exceeded": self.budget_exceeded,
             "top10_avg": self.get_top10_avg(),
             "best_score": self.get_best_score(),
-            "pmo_auc": self.get_current_pmo_score(),
+            "top10_auc": self.get_top10_auc(),
         }
 
     # ------------------------------------------------------------------ lookup / record
@@ -280,8 +280,8 @@ if ray is not None:
         def get_budget_status(self):
             return self.core.get_budget_status()
 
-        def get_current_pmo_score(self) -> float:
-            return self.core.get_current_pmo_score()
+        def get_top10_auc(self) -> float:
+            return self.core.get_top10_auc()
 
         def get_stats(self) -> dict:
             return self.core.get_stats()
