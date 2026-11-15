@@ -13,7 +13,7 @@ from tqdm import tqdm
 import pickle
 import csv
 
-from logger import Logger
+from utils.logger import Logger
 from molecule_dataset import RandomMoleculeDataset
 
 os.environ["RAY_DEDUP_LOGS"] = "0"

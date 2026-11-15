@@ -2,6 +2,10 @@
 In this script, we create a dataset from a file of SMILES strings to pretrain our model. We create a `MoleculeDesign`
 from each SMILES to obtain a sequence of actions.
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
 import time
 import pickle
 from rdkit import Chem, RDLogger

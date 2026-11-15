@@ -33,13 +33,13 @@ To pretrain with the settings in the paper, do the following:
 
 1. Download the file `chembl_35_chemreps.txt.gz` from this link: [Download File](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_35/chembl_35_chemreps.txt.gz)
 and put the extracted `chembl_35_chemreps.txt` under the `./data/chembl` directory.
-2. Run `$ python filter_molecules.py`. This will perform a train/val split with 100k validation molecules, which will be
-put under `data/chembl/chembl_{train/valid}.smiles`. Then, depending on the allowed vocabulary (see `filter_molecules.py`),
+2. Run `$ python scripts/filter_molecules.py`. This will perform a train/val split with 100k validation molecules, which will be
+put under `data/chembl/chembl_{train/valid}.smiles`. Then, depending on the allowed vocabulary (see `scripts/filter_molecules.py`),
 it filters the smiles for all strings containing the allowed sets of characters and save them under `data/chembl/chembl_{train/valid}_filtered.smiles`.
-3. Run `$ python create_pretrain_dataset.py`. This will convert the filtered SMILES to instances of `MoleculeDesign` (the class in `molecule_design.py`, which takes the role of the molecular graph environment).
+3. Run `$ python scripts/create_pretrain_dataset.py`. This will convert the filtered SMILES to instances of `MoleculeDesign` (the class in `molecule_design.py`, which takes the role of the molecular graph environment).
 The pickled molecules are saved in `./data/chembl/pretrain_sequences/chembl_{train/valid}.pickle`.
-4. Run `$ python pretrain.py` to perform pretraining of the model. The general config to use (e.g., architecture) is under `config.py`.
-In `pretrain.py`, you can specify pretrain-specific options directly at the entrypoint to adjust to your hardware, i.e.:
+4. Run `$ python scripts/pretrain.py` to perform pretraining of the model. The general config to use (e.g., architecture) is under `config.py`.
+In `scripts/pretrain.py`, you can specify pretrain-specific options directly at the entrypoint to adjust to your hardware, i.e.:
 ```python
 if __name__ == '__main__':
     pretrain_train_dataset = "./data/chembl/pretrain_sequences/chembl_train.pickle"
@@ -88,7 +88,7 @@ To use a different configuration module (e.g., a subclass of `MoleculeConfig` in
 
 To evaluate a trained checkpoint without retraining:
 
-`python evaluate_checkpoint.py --checkpoint results/<timestamp>/best_model.pt`
+`python scripts/evaluate_checkpoint.py --checkpoint results/<timestamp>/best_model.pt`
 
 You can also override specific RL hyperparameters directly via the command line:
 

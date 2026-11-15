@@ -2,11 +2,15 @@
 evaluate_checkpoint.py
 Standalone script to evaluate trained model checkpoints without retraining.
 Usage:
-    python evaluate_checkpoint.py --checkpoint path/to/best_model.pt
-    python evaluate_checkpoint.py --checkpoint path/to/best_model.pt --config configs.my_config
-    python evaluate_checkpoint.py --checkpoint path/to/best_model.pt --batch_size 250
-    python evaluate_checkpoint.py --checkpoint path/to/best_model.pt --subset_percent 1
+    python scripts/evaluate_checkpoint.py --checkpoint path/to/best_model.pt
+    python scripts/evaluate_checkpoint.py --checkpoint path/to/best_model.pt --config my_config
+    python scripts/evaluate_checkpoint.py --checkpoint path/to/best_model.pt --batch_size 250
+    python scripts/evaluate_checkpoint.py --checkpoint path/to/best_model.pt --subset_percent 1
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
 
 import argparse
 import copy
@@ -172,7 +176,7 @@ def main():
     parser.add_argument('--checkpoint', type=str, required=True,
                         help='Path to checkpoint file (e.g., best_model.pt)')
     parser.add_argument('--config', type=str, default=None,
-                        help='Optional config module path (e.g., configs.my_config)')
+                        help='Optional config module path (e.g., my_config)')
     parser.add_argument('--batch_size', type=int, default=500,
                         help='Batch size for evaluation (default: 500)')
     parser.add_argument('--output_dir', type=str, default=None,

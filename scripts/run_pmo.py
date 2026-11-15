@@ -2,7 +2,7 @@
 PMO-style benchmark runner (practical molecular optimization, 10,000 unique oracle calls, top-10 AUC).
 
 The pre-trained model is fine-tuned with policy-gradient updates (see `rl_updates.dr_grpo_update`) while every molecule
-is scored through one shared oracle (`pmo_oracle.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
+is scored through one shared oracle (`utils.pmo_oracle.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
 oracle budget and tracks the top-10 AUC. Generation starts from the single carbon atom "C".
 
 Each epoch draws `--samples_per_epoch` (128) IID samples from the policy. A random-forest surrogate trained on all
@@ -12,11 +12,11 @@ has at least 50 unique scored molecules); only these are evaluated with the orac
 
 Examples
 --------
-    python run_pmo.py --list_tasks
-    python run_pmo.py --task qed --run_id 1                       # one run, W&B + CSV logging
-    python run_pmo.py --task qed --run_id 1 --no_wandb --gpu 0    # CSV logging only, on GPU 0
-    python run_pmo.py --tasks drd2,jnk3,gsk3b --runs 3            # several tasks, 3 seeded runs each
-    python run_pmo.py --tasks all --runs 3                        # the whole task table below
+    python scripts/run_pmo.py --list_tasks
+    python scripts/run_pmo.py --task qed --run_id 1                       # one run, W&B + CSV logging
+    python scripts/run_pmo.py --task qed --run_id 1 --no_wandb --gpu 0    # CSV logging only, on GPU 0
+    python scripts/run_pmo.py --tasks drd2,jnk3,gsk3b --runs 3            # several tasks, 3 seeded runs each
+    python scripts/run_pmo.py --tasks all --runs 3                        # the whole task table below
 
 Outputs (per run, in `<results_root>/<task>/run_<id>/`)
     oracle_history.csv     every unique oracle call: call_id, smiles, score
@@ -34,6 +34,10 @@ the batch-mean baseline, i.e. plain REINFORCE with a mean baseline. For multi-pr
 baseline, REINFORCE) instead of one baseline per prompt (GRPO). Keep `rl_advantage_normalize=False` and
 `ppo_epochs=1` for the plain REINFORCE update.
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
 import argparse
 import copy
 import csv
@@ -149,8 +153,8 @@ def run_single(args):
     from config import MoleculeConfig
     from core.gumbeldore_dataset import GumbeldoreDataset
     from model.molecule_transformer import MoleculeTransformer
-    from pmo_oracle import CentralOracle
-    from chem_utils import SurrogateModel
+    from utils.pmo_oracle import CentralOracle
+    from utils.chem_utils import SurrogateModel
     from rl_updates import dr_grpo_update
 
     task = args.task

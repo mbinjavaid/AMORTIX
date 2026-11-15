@@ -126,7 +126,7 @@ class GumbeldoreDataset:
         self.gumbeldore_config = config.gumbeldore_config
         self.objective_evaluator = objective_evaluator
         self.oracle_tracker = oracle_tracker
-        self.central_oracle = central_oracle  # optional shared oracle actor (see pmo_oracle.py)
+        self.central_oracle = central_oracle  # optional shared oracle actor (see utils/pmo_oracle.py)
         self.devices_for_workers: List[str] = self.gumbeldore_config["devices_for_workers"]
 
         self.fragment_library = []
@@ -609,7 +609,7 @@ def async_sbs_worker(config: Config, job_pool: JobPool, network_weights: dict,
         network.eval()
 
         if central_oracle is not None:
-            from pmo_oracle import RemoteEvaluatorProxy
+            from utils.pmo_oracle import RemoteEvaluatorProxy
             objective_evaluator = RemoteEvaluatorProxy(central_oracle)
         else:
             objective_evaluator = MoleculeObjectiveEvaluator(config, torch.device(config.objective_gnn_device),

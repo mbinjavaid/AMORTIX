@@ -12,7 +12,7 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from pmo_oracle import PMOOracleCore, top10_auc  # noqa: E402
+from utils.pmo_oracle import PMOOracleCore, top10_auc  # noqa: E402
 
 
 def reference_top_auc(buffer, top_n, finish, freq_log, max_oracle_calls):
