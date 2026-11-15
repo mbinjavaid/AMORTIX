@@ -43,14 +43,17 @@ def validate_epoch(config: MoleculeConfig, network: MoleculeTransformer,
     Runs deterministic validation on the scaffolds defined in config.validation_scaffolds_path.
     Returns the mean objective score and success rate.
     """
-    val_path = getattr(config, 'validation_scaffolds_path', None)
-    if not val_path or not os.path.exists(val_path):
-        print(f"[Val] Validation path not found or not set: {val_path}")
-        return float("-inf"), 0.0
+    if config.prodrug_mode:
+        val_scaffolds = list(config.prodrug_parents_val)
+    else:
+        val_path = getattr(config, 'validation_scaffolds_path', None)
+        if not val_path or not os.path.exists(val_path):
+            print(f"[Val] Validation path not found or not set: {val_path}")
+            return float("-inf"), 0.0
 
-    # Load Scaffolds
-    with open(val_path, 'r') as f:
-        val_scaffolds = [line.strip() for line in f if line.strip()]
+        # Load Scaffolds
+        with open(val_path, 'r') as f:
+            val_scaffolds = [line.strip() for line in f if line.strip()]
 
     if not val_scaffolds:
         print("[Val] Validation file empty.")
@@ -142,17 +145,15 @@ def validate_supervised(eval_type: str, config_orig: MoleculeConfig, network: Mo
     # 1. Load Scaffolds
     validitation_prompts = []
 
-    # Priority A: Check explicit path in config
-    path = getattr(config, 'validation_scaffolds_path', None)
-    if path and os.path.exists(path):
-        print(f"[{eval_type}] Loading Scaffolds from: {path}")
-        with open(path, 'r') as f:
-            validitation_prompts = [line.strip() for line in f if line.strip()]
-
-    # Priority B: Check Prodrug mode
-    elif config.prodrug_mode:
-        print(f"[{eval_type}] Using Prodrug test parents.")
-        validitation_prompts = config.prodrug_parents_test
+    if config.prodrug_mode:
+        print(f"[{eval_type}] Using Prodrug validation parents.")
+        validitation_prompts = list(config.prodrug_parents_val)
+    else:
+        path = getattr(config, 'validation_scaffolds_path', None)
+        if path and os.path.exists(path):
+            print(f"[{eval_type}] Loading Scaffolds from: {path}")
+            with open(path, 'r') as f:
+                validitation_prompts = [line.strip() for line in f if line.strip()]
 
     if not validitation_prompts:
         print(f"[{eval_type}] Warning: No scaffolds found. Skipping evaluation.")
@@ -1120,6 +1121,9 @@ if __name__ == '__main__':
         gumbeldore_dset = GumbeldoreDataset(config=config, objective_evaluator=objective_eval,
                                             oracle_tracker=oracle_tracker)
 
+        # Prodrug validation needs validation parents
+        use_validation = config.use_validation_for_ckpt and (not config.prodrug_mode or len(config.prodrug_parents_val) > 0)
+
         for epoch in range(config.num_epochs):
             print("------")
             network_weights = copy.deepcopy(network.get_weights())
@@ -1156,14 +1160,14 @@ if __name__ == '__main__':
             current_val_mean_score = float("-inf")
             current_val_success_rate = 0.0  # Initialize success rate
 
-            if config.use_validation_for_ckpt and not config.prodrug_mode and config.use_dr_grpo:
+            if use_validation and config.use_dr_grpo:
                 # Unpack the two return values
                 current_val_mean_score, current_val_success_rate = validate_epoch(config, network, objective_eval)
 
                 generated_loggable_dict["validation_mean_score"] = current_val_mean_score
                 generated_loggable_dict["validation_success_rate"] = current_val_success_rate  # Log to file
 
-            elif config.use_validation_for_ckpt and not config.prodrug_mode and not config.use_dr_grpo:
+            elif use_validation and not config.use_dr_grpo:
                 # Unpack the two return values
                 current_val_mean_score, current_val_success_rate, individual_scores = validate_supervised('validation', config, network, objective_eval)
 
@@ -1196,7 +1200,7 @@ if __name__ == '__main__':
             # --- CHECKPOINT SAVING LOGIC ---
             saved_new_best = False
 
-            if config.use_validation_for_ckpt and not config.prodrug_mode:
+            if use_validation:
                 # New Logic: Save based on Validation Mean Score
                 if current_val_mean_score > best_val_mean_score:
                     print(
@@ -1243,7 +1247,7 @@ if __name__ == '__main__':
                 wandb_log["oracle_top10_auc"] = oracle_stats["pmo_auc"]
                 wandb_log["oracle_best_score"] = oracle_stats["best_score"]
 
-                if config.use_validation_for_ckpt and not config.prodrug_mode:
+                if use_validation:
                     wandb_log["validation_mean_score"] = current_val_mean_score
                     wandb_log["best_validation_mean_score"] = best_val_mean_score
                     wandb_log["validation_success_rate"] = current_val_success_rate  # Log to WandB

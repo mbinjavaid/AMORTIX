@@ -182,8 +182,8 @@ class MoleculeConfig:
         self.fixed_test_beam_width = 1  # Beam width of the deterministic test evaluation (1 = one molecule per scaffold)
         self.validation_scaffolds_path = "scaffold_splitting/zinc_splits/run_seed_42/val_scaffolds.txt"
         # self.evaluation_scaffolds_path = None # Uncomment to test unconditional generation
-        # Prodrug (objective_type = "prodrug_bbb"): validation and test use `prodrug_parents_test` only if these two
-        # paths are None (or missing); otherwise the scaffolds from the files are used. Set both to None.
+        # Prodrug (objective_type = "prodrug_bbb"): the test uses `prodrug_parents_test` only if
+        # `evaluation_scaffolds_path` is None (or missing), so set it to None. Validation uses `prodrug_parents_val`.
 
         self.use_validation_for_ckpt = True if self.use_dr_grpo else False  # If True, saves best_model.pt based on val_scaffolds mean score
 
@@ -241,6 +241,9 @@ class MoleculeConfig:
             "CC(=O)OC1=CC=CC=C1C(=O)O"  # Aspirin
         ]
 
+
+        # Validation parents (empty: no validation)
+        self.prodrug_parents_val = []
 
         # Test parents
         self.prodrug_parents_test = get_prodrug_test_smiles()

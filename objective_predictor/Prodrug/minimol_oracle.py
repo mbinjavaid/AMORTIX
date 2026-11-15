@@ -1,4 +1,11 @@
 import os
+import sys
+
+if sys.platform == "win32":
+    # Prevents RAM / pagefile crashes (WinError 1455) on Windows
+    os.environ["LOKY_MAX_CPU_COUNT"] = "1"
+    os.environ["OMP_NUM_THREADS"] = "1"
+
 import math
 import torch
 import torch.nn as nn
