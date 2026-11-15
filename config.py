@@ -2,6 +2,8 @@ import os
 import datetime
 import uuid
 
+from objective_predictor.Prodrug.parents import get_prodrug_test_smiles
+
 uid = uuid.uuid4().hex
 
 class MoleculeConfig:
@@ -180,6 +182,8 @@ class MoleculeConfig:
         self.fixed_test_beam_width = 1  # Beam width of the deterministic test evaluation (1 = one molecule per scaffold)
         self.validation_scaffolds_path = "scaffold_splitting/zinc_splits/run_seed_42/val_scaffolds.txt"
         # self.evaluation_scaffolds_path = None # Uncomment to test unconditional generation
+        # Prodrug (objective_type = "prodrug_bbb"): validation and test use `prodrug_parents_test` only if these two
+        # paths are None (or missing); otherwise the scaffolds from the files are used. Set both to None.
 
         self.use_validation_for_ckpt = True if self.use_dr_grpo else False  # If True, saves best_model.pt based on val_scaffolds mean score
 
@@ -238,19 +242,12 @@ class MoleculeConfig:
         ]
 
 
-        # Testing: Hold out Dopamine and Naltrexone
-        self.prodrug_parents_test = [
-            "C1=CC(=C(C=C1CCN)O)O",  # Dopamine
-            "C1CC1CN2CC[C@]34[C@@H]5C(=O)CC[C@]3([C@H]2CC6=C4C(=C(C=C6)O)O5)O"  # Naltrexone
-        ]
+        # Test parents
+        self.prodrug_parents_test = get_prodrug_test_smiles()
 
-        # BBB Objective Weights
-        self.bbb_weight_logp = 1.0
-        self.bbb_weight_hdonor = 1.0
-        self.bbb_weight_cleavable = 2.0
-        self.bbb_weight_qed = 2.0  # Push for drug-like molecules
-        self.bbb_weight_mw_penalty = 5.0  # Strong penalty for going over size
-        self.bbb_max_mw = 600.0  # Max Daltons
+        # BBB objective (MiniMol-based)
+        self.bbb_qed_floor = 0.4  # reward is zero below this QED
+        self.bbb_cache_dir = "./oracle_cache"  # trained MiniMol ensemble is cached here
 
         self.prodrug_parent_smiles = None  # Will be set during training
         self.prodrug_log_components = True  # Log individual components of prodrug objective

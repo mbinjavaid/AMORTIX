@@ -171,15 +171,11 @@ class MoleculeObjectiveEvaluator:
         self.predictor_workers = [PredictorWorker.remote(self.config, self.device) for _ in range(self.config.num_predictor_workers)]
 
         if getattr(self.config, 'objective_type', '') == 'prodrug_bbb':
-            # Use weights from config, defaulting to 1.0 if not set
             self.bbb_objective = BBBObjective(
-                weight_logp_delta=getattr(self.config, 'bbb_weight_logp', 1.0),
-                weight_hdonor_delta=getattr(self.config, 'bbb_weight_hdonor', 1.0),
-                weight_cleavable=getattr(self.config, 'bbb_weight_cleavable', 1.0),
-                weight_mw_penalty=getattr(self.config, 'bbb_weight_mw_penalty', 5.0),
-                max_mw=getattr(self.config, 'bbb_max_mw', 600.0),
-                weight_qed=getattr(self.config, 'bbb_weight_qed', 2.0)
+                qed_floor=getattr(self.config, 'bbb_qed_floor', 0.4),
+                cache_dir=getattr(self.config, 'bbb_cache_dir', './oracle_cache'),
             )
+            self.bbb_objective.oracle  # loads (or trains and caches) the MiniMol ensemble now
 
         # TDC objectives
         if getattr(self.config, 'objective_type', '') == 'jnk3':
@@ -299,9 +295,9 @@ class MoleculeObjectiveEvaluator:
                         mol_obj.aux_metrics = results['metrics']
                         # Add the weighted rewards too if you want to see them
                         mol_obj.aux_metrics.update({
-                            'reward_logp': results['reward_logp_weighted'],
-                            'reward_hdonor': results['reward_hdonor_weighted'],
-                            'reward_cleavable': results['reward_cleavable_weighted']
+                            'reward_bbb': results['reward_bbb'],
+                            'reward_qed_gate': results['reward_qed_gate'],
+                            'reward_purity': results['reward_purity'],
                         })
                 else:
                     # Fallback/Penalty if no parent is found (e.g. pure random gen)

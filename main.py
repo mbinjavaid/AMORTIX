@@ -1270,7 +1270,7 @@ if __name__ == '__main__':
                         if key in generated_loggable_dict:
                             wandb_log[key] = generated_loggable_dict[key]
 
-                    # This captures 'prodrug/mean_logp_delta', 'prodrug/fraction_cleavable', etc.
+                    # Prodrug objective components, e.g. 'prodrug/bbb_prob', 'prodrug/purity'
                     for key, val in generated_loggable_dict.items():
                         if key.startswith("prodrug/"):
                             wandb_log[key] = val

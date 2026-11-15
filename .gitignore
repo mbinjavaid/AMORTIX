@@ -138,3 +138,7 @@ configs
 data/*/*.txt
 data/*/*.smiles
 data/*/*.pt
+
+# Cached oracle models and data
+oracle_cache/
+admet_data/
