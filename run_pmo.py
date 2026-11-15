@@ -5,6 +5,11 @@ The pre-trained model is fine-tuned with policy-gradient updates (see `rl_update
 is scored through one shared oracle (`pmo_oracle.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
 oracle budget and tracks the top-10 AUC. Generation starts from the single carbon atom "C".
 
+Each epoch draws `--samples_per_epoch` (128) IID samples from the policy. A random-forest surrogate trained on all
+molecules scored so far picks the `--keep_per_epoch` (10) most promising unique ones (random ones until the surrogate
+has at least 50 unique scored molecules); only these are evaluated with the oracle and used for the policy update.
+`--no_surrogate` evaluates all samples instead.
+
 Examples
 --------
     python run_pmo.py --list_tasks
@@ -76,15 +81,20 @@ def parse_args():
     p.add_argument("--seed_base", type=int, default=42)
     p.add_argument("--max_calls", type=int, default=10000, help="Oracle budget (unique molecules).")
     p.add_argument("--max_epochs", type=int, default=100000, help="Safety cap on the number of epochs.")
-    p.add_argument("--search_type", choices=["iid_mc", "wor"], default="iid_mc",
-                   help="iid_mc: sample molecules from the policy. wor: sampling without replacement (beam of leaves).")
-    p.add_argument("--samples_per_epoch", type=int, default=64,
-                   help="Molecules generated (and scored) per epoch: IID samples for iid_mc, beam width for wor.")
+    p.add_argument("--samples_per_epoch", type=int, default=128,
+                   help="IID samples drawn from the policy per epoch.")
+    p.add_argument("--keep_per_epoch", type=int, default=10,
+                   help="Number of the sampled molecules per epoch that are evaluated with the oracle (and used for "
+                        "the update). They are selected by the surrogate model.")
+    p.add_argument("--no_surrogate", action="store_true",
+                   help="Disable surrogate filtering: all sampled molecules are evaluated with the oracle.")
+    p.add_argument("--surrogate_n_jobs", type=int, default=-1, help="CPU threads of the surrogate random forest.")
     p.add_argument("--entropy", type=float, default=None, help="Entropy bonus. Default: per-task value from TASK_ENTROPY.")
     p.add_argument("--lr", type=float, default=None, help="Learning rate. Default: value from config.py.")
-    p.add_argument("--stall_threshold", type=int, default=10,
+    p.add_argument("--stall_threshold", type=int, default=None,
                    help="If fewer than this many new unique molecules were scored over the last 10 epochs, the "
-                        "entropy bonus is raised by 0.001 (up to 0.01); if it is already at 0.01 the run stops.")
+                        "entropy bonus is raised by 0.001 (up to 0.01); if it is already at 0.01 the run stops. "
+                        "Default: --keep_per_epoch.")
     p.add_argument("--no_stall_handling", action="store_true", help="Disable the stall detection described above.")
     p.add_argument("--checkpoint", default=None, help="Pre-trained checkpoint. Default: load_checkpoint_from_path of config.py")
     p.add_argument("--gpu", default=None, help="GPU id to use (sets CUDA_VISIBLE_DEVICES). Default: config.py value.")
@@ -101,13 +111,15 @@ def launch_many(args):
     tasks = list(TASK_ENTROPY) if args.tasks == "all" else [t.strip() for t in args.tasks.split(",") if t.strip()]
     passthrough = []
     for flag, val in [("--seed_base", args.seed_base), ("--max_calls", args.max_calls), ("--max_epochs", args.max_epochs),
-                      ("--search_type", args.search_type), ("--samples_per_epoch", args.samples_per_epoch),
+                      ("--samples_per_epoch", args.samples_per_epoch), ("--keep_per_epoch", args.keep_per_epoch),
+                      ("--surrogate_n_jobs", args.surrogate_n_jobs),
                       ("--entropy", args.entropy), ("--lr", args.lr), ("--stall_threshold", args.stall_threshold),
                       ("--checkpoint", args.checkpoint), ("--gpu", args.gpu), ("--results_root", args.results_root),
                       ("--wandb_project", args.wandb_project), ("--wandb_entity", args.wandb_entity)]:
         if val is not None:
             passthrough += [flag, str(val)]
-    for flag, val in [("--no_stall_handling", args.no_stall_handling), ("--no_wandb", args.no_wandb)]:
+    for flag, val in [("--no_stall_handling", args.no_stall_handling), ("--no_wandb", args.no_wandb),
+                      ("--no_surrogate", args.no_surrogate)]:
         if val:
             passthrough.append(flag)
 
@@ -138,6 +150,7 @@ def run_single(args):
     from core.gumbeldore_dataset import GumbeldoreDataset
     from model.molecule_transformer import MoleculeTransformer
     from pmo_oracle import CentralOracle
+    from chem_utils import SurrogateModel
     from rl_updates import dr_grpo_update
 
     task = args.task
@@ -180,9 +193,9 @@ def run_single(args):
         first_gpu = config.CUDA_VISIBLE_DEVICES.split(",")[0] if config.CUDA_VISIBLE_DEVICES else "0"
         config.training_device = f"cuda:{first_gpu}"
     config.gumbeldore_config["devices_for_workers"] = [config.training_device]
-    config.gumbeldore_config["search_type"] = args.search_type
+    config.gumbeldore_config["search_type"] = "iid_mc"
     config.gumbeldore_config["num_samples_per_instance"] = args.samples_per_epoch
-    config.gumbeldore_config["beam_width"] = args.samples_per_epoch
+    config.gumbeldore_config["num_trajectories_to_keep"] = args.keep_per_epoch
     config.gumbeldore_config["destination_path"] = None
 
     np.random.seed(seed)
@@ -195,8 +208,9 @@ def run_single(args):
         import wandb
         wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=f"{task}_run{args.run_id}_seed{seed}",
                    config=dict(task=task, run_id=args.run_id, seed=seed, max_calls=args.max_calls, entropy=entropy,
-                               lr=config.optimizer["lr"], search_type=args.search_type,
-                               samples_per_epoch=args.samples_per_epoch, stall_threshold=args.stall_threshold,
+                               lr=config.optimizer["lr"], search_type="iid_mc",
+                               samples_per_epoch=args.samples_per_epoch, keep_per_epoch=args.keep_per_epoch,
+                               surrogate=not args.no_surrogate, stall_threshold=args.stall_threshold,
                                stall_handling=not args.no_stall_handling))
 
     epoch_log_path = os.path.join(run_dir, "pmo_epoch_log.csv")
@@ -225,6 +239,12 @@ def run_single(args):
                                  weight_decay=config.optimizer["weight_decay"])
     dataset = GumbeldoreDataset(config=config, objective_evaluator=None, central_oracle=oracle)
 
+    # Surrogate: a random forest on the molecules scored so far. Of the samples drawn each epoch only `keep_per_epoch`
+    # are evaluated with the oracle: the ones the surrogate ranks highest (random ones until it has enough data).
+    surrogate = None if args.no_surrogate else SurrogateModel(n_jobs=args.surrogate_n_jobs)
+    surrogate_buffer = {"smiles": [], "scores": []}
+    stall_threshold = args.stall_threshold if args.stall_threshold is not None else args.keep_per_epoch
+
     # ---- training loop -------------------------------------------------------------------------------------------
     start_time = time.time()
     new_calls_history = []
@@ -238,7 +258,7 @@ def run_single(args):
             break
 
         if not args.no_stall_handling and len(new_calls_history) >= 10:
-            if sum(new_calls_history[-10:]) < args.stall_threshold:
+            if sum(new_calls_history[-10:]) < stall_threshold:
                 if config.rl_entropy_beta < 0.01:
                     config.rl_entropy_beta += 0.001
                     print(f">> Stalling detected. Entropy beta raised to {config.rl_entropy_beta:.4f}")
@@ -252,7 +272,9 @@ def run_single(args):
         network_weights = copy.deepcopy(network.get_weights())
         network.eval()
         trajectories = dataset.generate_dataset(network_weights=network_weights, best_objective=None,
-                                                memory_aggressive=False, mode="train")
+                                                memory_aggressive=False, mode="train",
+                                                surrogate_filter=None if surrogate is None else
+                                                {"model": surrogate, "num_keep": args.keep_per_epoch})
 
         metrics = {}
         if trajectories and any(trajectories):
@@ -262,6 +284,14 @@ def run_single(args):
             network.eval()
         else:
             print("WARNING: no trajectories generated this epoch, skipping update.")
+
+        if surrogate is not None:
+            for group in trajectories or []:
+                for m in group:
+                    if m.objective is not None and m.objective > float("-inf") and m.smiles_string:
+                        surrogate_buffer["smiles"].append(m.smiles_string)
+                        surrogate_buffer["scores"].append(float(m.objective))
+            surrogate.train(surrogate_buffer["smiles"], surrogate_buffer["scores"])
 
         stats = ray.get(oracle.get_stats.remote())
         new_calls = stats["unique_calls"] - calls_before

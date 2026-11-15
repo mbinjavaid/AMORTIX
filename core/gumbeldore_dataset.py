@@ -141,7 +141,8 @@ class GumbeldoreDataset:
                          memory_aggressive: bool = False,
                          prompts: Optional[List[str]] = None,
                          return_raw_trajectories: bool = False,
-                         mode: str = "eval"
+                         mode: str = "eval",
+                         surrogate_filter: Optional[dict] = None
                          ):
         """
         Parameters:
@@ -151,6 +152,10 @@ class GumbeldoreDataset:
                 intermediate states in the search tree are not stored after transitioning from them, only their
                 policies.
             prompts: [List[str], optional] List of SMILES strings to use as prompts in Prodrug mode.
+            surrogate_filter: [dict, optional] Only for search_type "iid_mc": {"model": SurrogateModel, "num_keep": int}.
+                Of the sampled molecules per start instance, only `num_keep` unique ones (ranked by the surrogate's
+                predicted objective, or simply the first ones while the surrogate is not fitted) are evaluated with
+                the objective; the others are discarded.
 
         Behavior:
             - If config.use_dr_grpo is False: returns metrics dict (original behavior).
@@ -259,7 +264,7 @@ class GumbeldoreDataset:
                 self.config, job_pool, network_weights, device,
                 batch_size_gpu if device != "cpu" else batch_size_cpu,
                 cpu_cores[i], best_objective, memory_aggressive,
-                self.oracle_tracker, self.central_oracle
+                self.oracle_tracker, self.central_oracle, surrogate_filter
             )
             for i, device in enumerate(self.devices_for_workers)
         ]
@@ -434,7 +439,8 @@ def async_sbs_worker(config: Config, job_pool: JobPool, network_weights: dict,
                      best_objective: Optional[float] = None,
                      memory_aggressive: bool = False,
                     oracle_tracker=None,
-                    central_oracle=None
+                    central_oracle=None,
+                    surrogate_filter=None
                      ):
     network = MoleculeTransformer(config, device)
     network.load_state_dict(network_weights)
@@ -458,6 +464,29 @@ def async_sbs_worker(config: Config, job_pool: JobPool, network_weights: dict,
         for i, obj in enumerate(objs):
             trajectories[i].objective = obj
         return objs
+
+    def select_and_evaluate(candidates: List[MoleculeDesign], model, num_keep: int) -> List[MoleculeDesign]:
+        """Evaluates only `num_keep` of the candidates: the first ones if the surrogate is not fitted yet, otherwise
+        the unique candidates with the highest surrogate-predicted objective."""
+        if not candidates:
+            return []
+        if not model.is_fitted:
+            selected = candidates[:num_keep]
+            batch_leaf_evaluation_fn(selected)
+            return selected
+
+        pred_scores = model.predict_ranking_scores([c.smiles_string for c in candidates])
+        sorted_paired = sorted(zip(candidates, pred_scores), key=lambda x: x[1], reverse=True)
+        selected, seen_smiles = [], set()
+        for cand, _ in sorted_paired:
+            if len(selected) >= num_keep:
+                break
+            smi = cand.smiles_string
+            if smi and smi not in seen_smiles:
+                seen_smiles.add(smi)
+                selected.append(cand)
+        batch_leaf_evaluation_fn(selected)
+        return selected
 
     def child_transition_fn(trajectory_action_pairs: List[Tuple[MoleculeDesign, int]]):
         # Collect all trajectories that need a forward pass into a single list.
@@ -601,10 +630,16 @@ def async_sbs_worker(config: Config, job_pool: JobPool, network_weights: dict,
                                                                         child_log_probability_fn,
                                                                         config)
 
-                # Evaluate all generated trajectories
-                all_trajectories = [traj for traj_list in trajectories_by_root for traj in traj_list]
-                if all_trajectories:
-                    batch_leaf_evaluation_fn(all_trajectories)
+                if surrogate_filter is not None:
+                    trajectories_by_root = [
+                        select_and_evaluate(traj_list, surrogate_filter["model"], surrogate_filter["num_keep"])
+                        for traj_list in trajectories_by_root
+                    ]
+                else:
+                    # Evaluate all generated trajectories
+                    all_trajectories = [traj for traj_list in trajectories_by_root for traj in traj_list]
+                    if all_trajectories:
+                        batch_leaf_evaluation_fn(all_trajectories)
 
                 # Group results for pushing back to the job pool
                 results_to_push = [(idx, trajectories) for idx, trajectories in zip(idx_list, trajectories_by_root)]
