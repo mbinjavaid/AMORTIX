@@ -1,8 +1,8 @@
 # **AMORTIX: Amortized Molecular Optimization via Group Relative Policy Optimization**
 
-AMORTIX is a framework for amortized molecular optimization. It adapts a pre-trained Graph Transformer model to optimize molecules via sequential atom-and-bond additions. To address the high variance arising from the heterogeneous difficulty of distinct starting structures, AMORTIX employs Group Relative Policy Optimization (GRPO) for goal-directed fine-tuning.
+AMORTIX is a framework for amortized molecular optimization. It adapts a pre-trained Graph Transformer model to extend a given starting structure (a single atom, a scaffold, a parent molecule) into an optimized molecule via sequential atom-and-bond additions. To address the high variance arising from the heterogeneous difficulty of distinct starting structures, AMORTIX employs Group Relative Policy Optimization (GRPO) for goal-directed fine-tuning.
 
-This approach normalizes rewards relative to the starting structure, stabilizing the learning process. The resulting policy generalizes to out-of-distribution molecular scaffolds and generates optimized molecules in a single forward pass without requiring inference-time oracle calls or iterative refinement.
+This approach normalizes rewards relative to the starting structure, stabilizing the learning process. The resulting policy generalizes to unseen starting structures (e.g., out-of-distribution scaffolds) and generates optimized molecules in a single forward pass without requiring inference-time oracle calls or iterative refinement.
 
 ## **Installation**
 
@@ -58,11 +58,13 @@ if __name__ == '__main__':
 
 ## **Data Preparation**
 
-Before running scaffold-constrained tasks, generate the cluster-based scaffold splits from the ZINC dataset to evaluate generalization to out-of-distribution scaffolds.
+The scaffold-conditioned experiments use cluster-based scaffold splits of the ZINC dataset, to evaluate generalization to out-of-distribution scaffolds. To generate them:
 
 `cd scaffold_splitting && python smart_splitting.py`
 
 The script reads `data/zinc/zinc.smiles` and writes `train_scaffolds.txt`, `val_scaffolds.txt` and `test_scaffolds.txt` for each split seed into `scaffold_splitting/zinc_splits_optimized/run_seed_<seed>/`. Point `fragment_library_path`, `validation_scaffolds_path` and `evaluation_scaffolds_path` in `config.py` to these files.
+
+Any text file with one SMILES per line can serve as the set of starting structures (`fragment_library_path`).
 
 ## **Usage and Configuration**
 
@@ -74,7 +76,7 @@ Key variables in `config.py`:
 * `prodrug_bbb` scores a generated molecule against its parent as `P_BBB * QED gate * junction purity`: `P_BBB` is a MiniMol-based ensemble trained on TDC `bbb_martins` (trained on first use and cached in `oracle_cache/`), the QED gate requires QED >= `bbb_qed_floor`, and the purity is the fraction of bonds between parent and added part that are hydrolyzable.
 * `max_oracle_calls`: Budget of unique molecules scored by the objective during training (default 50000). Training stops when it is used up; set to `None` for no limit.
 * `use_dr_grpo`: Set to True to enable GRPO reinforcement learning. Set to False to run supervised fine-tuning.  
-* `use_fragment_library`: Master switch for structural conditioning (scaffold-based generation).
+* `use_fragment_library`: Master switch for conditioning on starting structures read from a SMILES file (e.g., scaffolds). If off, generation starts from a single carbon atom.
 * `use_grpo_grouping`: If True (GRPO), each starting structure is its own group with its own baseline. Set to False to pool all trajectories of an epoch into a single group with one global baseline, which gives REINFORCE. For plain REINFORCE also keep `rl_advantage_normalize = False` and `ppo_epochs = 1`.
 * `use_wandb`: Set to True to log to Weights & Biases (off by default). Set `wandb_project` and `wandb_entity` accordingly.
 
