@@ -167,7 +167,7 @@ class MoleculeConfig:
 
         # --- Dr. GRPO / RL fine-tuning baseline configuration ---
 
-        self.use_dr_grpo = True  # Enable RL fine-tuning (vs pure supervised)
+        self.rl_mode = True  # True: RL training (GRPO / REINFORCE). False: supervised fine-tuning
 
         self.use_fragment_library = True  # Master switch for GRPO prompting
         # self.fragment_library_path = None  # Path to TRAINING scaffolds
@@ -185,7 +185,7 @@ class MoleculeConfig:
         # Prodrug (objective_type = "prodrug_bbb"): the test uses `prodrug_parents_test` only if
         # `evaluation_scaffolds_path` is None (or missing), so set it to None. Validation uses `prodrug_parents_val`.
 
-        self.use_validation_for_ckpt = True if self.use_dr_grpo else False  # If True, saves best_model.pt based on val_scaffolds mean score
+        self.use_validation_for_ckpt = True if self.rl_mode else False  # If True, saves best_model.pt based on val_scaffolds mean score
 
         # K: Number of completions per prompt is already set by:
         # self.gumbeldore_config["num_samples_per_instance"] = ... (for iid_mc)
@@ -225,7 +225,7 @@ class MoleculeConfig:
 
         # Structural / safety
         self.rl_assert_masks = False  # Enable strict feasibility & finite log_prob assertions
-        self.freeze_all_except_final_layer = False if self.use_dr_grpo else True  # If True, only final layer is trainable
+        self.freeze_all_except_final_layer = False if self.rl_mode else True  # If True, only final layer is trainable
 
         # Mixed precision
         self.use_amp = True

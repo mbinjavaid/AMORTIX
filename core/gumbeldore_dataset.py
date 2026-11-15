@@ -156,8 +156,8 @@ class GumbeldoreDataset:
                 `num_keep` of the sampled molecules per start instance, chosen by the surrogate, are evaluated.
 
         Behavior:
-            - If config.use_dr_grpo is False: returns metrics dict (original behavior).
-            - If config.use_dr_grpo is True: returns a flat List[MoleculeDesign] (raw trajectories) and does NOT call process_results.
+            - If config.rl_mode is False: returns metrics dict (original behavior).
+            - If config.rl_mode is True: returns a flat List[MoleculeDesign] (raw trajectories) and does NOT call process_results.
             - Also accept `prompts` (List[str]) for Prodrug mode.
 
         Generates trajectories.
@@ -206,7 +206,7 @@ class GumbeldoreDataset:
                 )
 
         # Scaffold Training Mode
-        elif self.config.use_dr_grpo and self.config.use_fragment_library and self.fragment_library:
+        elif self.config.rl_mode and self.config.use_fragment_library and self.fragment_library:
             # Sample N random scaffolds from the loaded library
             n_prompts = self.config.num_prompts_per_epoch
 
@@ -287,7 +287,7 @@ class GumbeldoreDataset:
         torch.cuda.empty_cache()
 
         # RL mode: return raw MoleculeDesign list (no metrics dict)
-        if self.config.use_dr_grpo:
+        if self.config.rl_mode:
             grouped_designs: List[List[MoleculeDesign]] = []
 
             for group_result in results:

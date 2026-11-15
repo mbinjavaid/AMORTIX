@@ -75,7 +75,6 @@ Key variables in `config.py`:
 * `objective_type`: Sets the target objective (`"kinase_mpo"`, `"jnk3"`, `"prodrug_bbb"`, or any other task of the TDC oracle collection, e.g., `"drd2"`, `"celecoxib_rediscovery"`, `"zaleplon_mpo"`).
 * `prodrug_bbb` scores a generated molecule against its parent as `P_BBB * QED gate * junction purity`: `P_BBB` is a MiniMol-based ensemble trained on TDC `bbb_martins` (trained on first use and cached in `oracle_cache/`), the QED gate requires QED >= `bbb_qed_floor`, and the purity is the fraction of bonds between parent and added part that are hydrolyzable.
 * `max_oracle_calls`: Budget of unique molecules scored by the objective during training (default 50000). Training stops when it is used up; set to `None` for no limit.
-* `use_dr_grpo`: Set to True to enable GRPO reinforcement learning. Set to False to run supervised fine-tuning.  
 * `use_fragment_library`: Master switch for conditioning on starting structures read from a SMILES file (e.g., scaffolds). If off, generation starts from a single carbon atom.
 * `use_grpo_grouping`: If True (GRPO), each starting structure is its own group with its own baseline. Set to False to pool all trajectories of an epoch into a single group with one global baseline, which gives REINFORCE. For plain REINFORCE also keep `rl_advantage_normalize = False` and `ppo_epochs = 1`.
 * `use_wandb`: Set to True to log to Weights & Biases (off by default). Set `wandb_project` and `wandb_entity` accordingly.

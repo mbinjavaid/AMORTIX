@@ -1110,7 +1110,7 @@ if __name__ == '__main__':
             print(f"Wall clock limit of training set to {config.wall_clock_limit / 3600} hours")
             start_time_counter = time.perf_counter()
 
-        rl_mode_active = getattr(config, "use_dr_grpo", False)
+        rl_mode_active = getattr(config, "rl_mode", False)
 
         if getattr(config, "rl_use_novelty_bonus") and rl_mode_active:
             print("Novelty bonus enabled.")
@@ -1160,14 +1160,14 @@ if __name__ == '__main__':
             current_val_mean_score = float("-inf")
             current_val_success_rate = 0.0  # Initialize success rate
 
-            if use_validation and config.use_dr_grpo:
+            if use_validation and config.rl_mode:
                 # Unpack the two return values
                 current_val_mean_score, current_val_success_rate = validate_epoch(config, network, objective_eval)
 
                 generated_loggable_dict["validation_mean_score"] = current_val_mean_score
                 generated_loggable_dict["validation_success_rate"] = current_val_success_rate  # Log to file
 
-            elif use_validation and not config.use_dr_grpo:
+            elif use_validation and not config.rl_mode:
                 # Unpack the two return values
                 current_val_mean_score, current_val_success_rate, individual_scores = validate_supervised('validation', config, network, objective_eval)
 
@@ -1314,7 +1314,7 @@ if __name__ == '__main__':
 
     torch.cuda.empty_cache()
     with torch.no_grad():
-        if config.use_dr_grpo:
+        if config.rl_mode:
             test_loggable_dict = evaluate('test', config, network, objective_eval)
         else:
             test_loggable_dict = evaluate_supervised('test', config, network, objective_eval)

@@ -129,7 +129,7 @@ def run_single(args, task, seed):
     config.start_c_chain_max_len = 1
     config.repeat_start_instances = 1
 
-    config.use_dr_grpo = True
+    config.rl_mode = True
     config.use_grpo_grouping = True
     config.rl_advantage_normalize = False
     config.ppo_epochs = 1
