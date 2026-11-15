@@ -2,7 +2,7 @@
 PMO-style benchmark runner (practical molecular optimization, 10,000 unique oracle calls, top-10 AUC).
 
 The pre-trained model is fine-tuned with policy-gradient updates (see `rl_updates.dr_grpo_update`) while every molecule
-is scored through one shared oracle (`utils.pmo_oracle.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
+is scored through one shared oracle (`utils.oracle_tracking.CentralOracle`) that de-duplicates by canonical SMILES, enforces the
 oracle budget and tracks the top-10 AUC. Generation starts from the single carbon atom "C".
 
 Each epoch draws `--samples_per_epoch` (128) IID samples from the policy. A random-forest surrogate trained on all
@@ -153,7 +153,7 @@ def run_single(args):
     from config import MoleculeConfig
     from core.gumbeldore_dataset import GumbeldoreDataset
     from model.molecule_transformer import MoleculeTransformer
-    from utils.pmo_oracle import CentralOracle
+    from utils.oracle_tracking import CentralOracle
     from utils.chem_utils import SurrogateModel
     from rl_updates import dr_grpo_update
 

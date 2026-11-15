@@ -2,7 +2,7 @@
 Checks the oracle bookkeeping and the top-10 AUC against a direct re-implementation of the PMO benchmark's
 `top_auc(buffer, top_n=10, finish=True, freq_log=100, max_oracle_calls=10000)`.
 
-Run with:  python -m pytest tests/test_pmo_oracle.py   (or: python tests/test_pmo_oracle.py)
+Run with:  python -m pytest tests/test_oracle_tracking.py   (or: python tests/test_oracle_tracking.py)
 """
 import os
 import random
@@ -12,7 +12,7 @@ import tempfile
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.pmo_oracle import PMOOracleCore, top10_auc  # noqa: E402
+from utils.oracle_tracking import OracleLedger, PMOOracleCore, top10_auc  # noqa: E402
 
 
 def reference_top_auc(buffer, top_n, finish, freq_log, max_oracle_calls):
@@ -123,6 +123,36 @@ def test_full_budget_of_10000():
         buffer = {smi: [sc, i + 1] for i, (smi, sc) in enumerate(core.global_cache.items())}
         ref = reference_top_auc(buffer, 10, True, 100, 10000)
         assert abs(core.get_current_pmo_score() - ref) < 1e-9
+
+
+def test_lookup_record_flow_with_context_duplicates_and_race():
+    """The flow used by the objective evaluator: lookup -> score only what is new -> record."""
+    with tempfile.TemporaryDirectory() as d:
+        led = OracleLedger(d, max_budget=4)
+        items = ["CCO", "OCC", ("CCN", "CCCC"), ("CCN", "CCCCC"), ("CCN", "CCCC"), "C", "bad", "CCCl", "CCBr"]
+        st = led.lookup(items)
+        kinds = [x[0] for x in st]
+        # "OCC" duplicates "CCO"; the same molecule with a different parent is a different entry; the last
+        # ("CCN","CCCC") duplicates item 2; "C"/"bad" are skipped; budget 4 -> only 4 distinct entries are new
+        assert kinds == ["new", "dup", "new", "new", "dup", "skip", "skip", "new", "over"], kinds
+        assert led.budget_exceeded
+        new_pos = [i for i, x in enumerate(kinds) if x == "new"]
+        out = led.record([items[i] for i in new_pos], [0.1, 0.2, 0.3, 0.4], [None, {"a": 1.0}, None, None])
+        assert out == [0.1, 0.2, 0.3, 0.4] and led.unique_calls == 4
+        assert led.lookup([("CCN", "CCCC")])[0][:2] == ("cached", 0.2) and led.lookup([("CCN", "CCCC")])[0][2] == {"a": 1.0}
+        # a second worker that scored the same molecule meanwhile: stored score is kept, nothing double counted
+        assert led.record(["OCC"], [0.9]) == [0.1] and led.unique_calls == 4
+        # budget is used up: new molecules get -inf
+        assert led.record(["CCI"], [0.99]) == [float("-inf")] and led.unique_calls == 4
+        import csv as _csv
+        rows = list(_csv.DictReader(open(os.path.join(d, "oracle_history.csv"))))
+        assert [r["context"] for r in rows] == ["", "CCCC", "CCCCC", ""] or len(rows) == 4
+
+
+def test_no_budget_ledger_auc_uses_calls_so_far():
+    led = OracleLedger(None, max_budget=None)
+    led.record(["CCO", "CCN"], [0.5, 0.7])
+    assert led.unique_calls == 2 and led.get_current_pmo_score() > 0
 
 
 def test_trivial_and_invalid_not_counted():

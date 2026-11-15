@@ -164,22 +164,6 @@ class PredictorWorker:
         model.eval()
         return model
 
-@ray.remote
-class OracleTracker:
-    def __init__(self):
-        self.seen_smiles = set()
-
-    def register_and_count(self, smiles_list: List[str]) -> int:
-        """
-        Registers new SMILES and returns the total count of unique SMILES seen so far.
-        """
-        for s in smiles_list:
-            self.seen_smiles.add(s)
-        return len(self.seen_smiles)
-
-    def get_count(self) -> int:
-        return len(self.seen_smiles)
-
 class MoleculeObjectiveEvaluator:
     def __init__(self, config: MoleculeConfig, device: torch.device = None, oracle_tracker=None):
         self.config = config
@@ -266,13 +250,58 @@ class MoleculeObjectiveEvaluator:
                 except:
                     continue
 
-        # Oracle Counting Logic
-        # We perform this right here, after feasibility checks but before any prediction model runs.
         if self.oracle_tracker is not None and len(feasible_molecules) > 0:
-            # Fire and forget (or wait if you want strict synchronization, but not strictly necessary for logging)
-            # We use .remote() to send the update to the global actor.
-            self.oracle_tracker.register_and_count.remote(feasible_smiles)
+            objs = self._score_with_ledger(feasible_idcs, feasible_molecules, feasible_smiles, molecule_designs)
+        else:
+            objs = self._score_feasible(feasible_idcs, feasible_molecules, molecule_designs)
+        all_objs = np.array([-np.inf] * len(molecule_designs))
+        all_objs[feasible_idcs] = objs
 
+        return all_objs
+
+    def _score_with_ledger(self, feasible_idcs, feasible_molecules, feasible_smiles, molecule_designs) -> np.ndarray:
+        """
+        Scores through the shared oracle ledger (see utils/oracle_tracking.py): every unique molecule is scored once,
+        counted, written to the history and checked against the budget. For the prodrug objective the score depends on
+        the parent, so a molecule is unique per (parent, molecule).
+        """
+        use_context = getattr(self.config, 'objective_type', '') == 'prodrug_bbb'
+        items = []
+        for idx, smi in zip(feasible_idcs, feasible_smiles):
+            design = molecule_designs[idx]
+            context = getattr(design, 'prompt_smiles', None) if (use_context and isinstance(design, MoleculeDesign)) else None
+            items.append((smi, context))
+
+        statuses = ray.get(self.oracle_tracker.lookup.remote(items))
+
+        new_pos = [j for j, st in enumerate(statuses) if st[0] == "new"]
+        recorded = []
+        if new_pos:
+            new_scores = self._score_feasible([feasible_idcs[j] for j in new_pos],
+                                              [feasible_molecules[j] for j in new_pos],
+                                              molecule_designs)
+            extras = [getattr(molecule_designs[feasible_idcs[j]], 'aux_metrics', None) for j in new_pos]
+            recorded = ray.get(self.oracle_tracker.record.remote(
+                [items[j] for j in new_pos], [float(x) for x in new_scores], extras))
+
+        objs = np.full(len(items), -np.inf)
+        for k, j in enumerate(new_pos):
+            objs[j] = recorded[k]
+        for j, st in enumerate(statuses):
+            design = molecule_designs[feasible_idcs[j]]
+            if st[0] == "cached":
+                objs[j] = st[1]
+                if st[2] is not None and isinstance(design, MoleculeDesign):
+                    design.aux_metrics = dict(st[2])
+            elif st[0] == "dup":
+                objs[j] = objs[st[1]]
+                first = molecule_designs[feasible_idcs[st[1]]]
+                if getattr(first, 'aux_metrics', None) and isinstance(design, MoleculeDesign):
+                    design.aux_metrics = dict(first.aux_metrics)
+        return objs
+
+    def _score_feasible(self, feasible_idcs, feasible_molecules, molecule_designs) -> np.ndarray:
+        """Evaluates the objective on the given feasible molecules (`feasible_idcs` index `molecule_designs`)."""
         if getattr(self.config, 'objective_type', '') == 'prodrug_bbb':
             objs = []
             # We iterate over the indices of feasible molecules
@@ -346,10 +375,7 @@ class MoleculeObjectiveEvaluator:
             ]
             future_objs = ray.get(future_objs)
             objs = np.concatenate(future_objs)
-        all_objs = np.array([-np.inf] * len(molecule_designs))
-        all_objs[feasible_idcs] = objs
-
-        return all_objs
+        return objs
 
     def infeasible_by_special_constraints(self, mol: MoleculeDesign) -> bool:
         """

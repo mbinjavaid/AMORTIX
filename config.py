@@ -69,11 +69,6 @@ class MoleculeConfig:
         # Objective molecule predictor
         # self.GHGNN_model_path = os.path.join("objective_predictor/GH_GNN_IDAC/models/GHGNN.pth")
         # self.GHGNN_hidden_dim = 113
-        # self.objective_type = "celecoxib_rediscovery"  # either "IBA" or "DMBA_TMB" for solvent design, or goal-directed task from GuacaMol (see README)
-        # self.objective_type = "median_tadalafil_sildenafil"  # either "IBA" or "DMBA_TMB" for solvent design, or goal-directed task from GuacaMol (see README)
-        # self.objective_type = "zaleplon_mpo"  # either "IBA" or "DMBA_TMB" for solvent design, or goal-directed task from GuacaMol (see README)
-        # self.objective_type = "ranolazine_mpo"  # either "IBA" or "DMBA_TMB" for solvent design, or goal-directed task from GuacaMol (see README)
-        # self.objective_type = "prodrug_bbb"  # either "IBA" or "DMBA_TMB" for solvent design, or goal-directed task from GuacaMol (see README)
 
         # Objs (jnk3, kinase_mpo, prodrug_bbb)
         # self.objective_type = "prodrug_bbb"
@@ -182,6 +177,7 @@ class MoleculeConfig:
         self.include_carbon_prompt = True
 
         self.evaluation_scaffolds_path = "scaffold_splitting/zinc_splits/run_seed_42/test_scaffolds.txt"  # can use test_scaffolds_small for quick testing
+        self.fixed_test_beam_width = 1  # Beam width of the deterministic test evaluation (1 = one molecule per scaffold)
         self.validation_scaffolds_path = "scaffold_splitting/zinc_splits/run_seed_42/val_scaffolds.txt"
         # self.evaluation_scaffolds_path = None # Uncomment to test unconditional generation
 
@@ -266,7 +262,9 @@ class MoleculeConfig:
         # For plain REINFORCE additionally keep rl_advantage_normalize=False and ppo_epochs=1.
         # With a single start prompt per epoch both settings give the same update.
         self.use_grpo_grouping = True  # If True, treats each parent as a separate group in GRPO
-        self.max_oracle_calls = None  # Optional limit on oracle calls during training
+        # Budget of unique molecules scored by the objective during training (training stops when it is used up).
+        # None = no limit. Every unique call is written to `oracle_history.csv` in the results directory.
+        self.max_oracle_calls = 50000
 
         # --- WandB Logging ---
         self.use_wandb = False  # Master switch for WandB logging

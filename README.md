@@ -70,7 +70,8 @@ The framework is controlled via configuration files and command-line arguments. 
 
 Key variables in `config.py`:
 
-* `objective_type`: Sets the target objective: `"kinase_mpo"`, `"jnk3"`, `"prodrug_bbb"`, the hard GuacaMol tasks (`"guacamol_<task>"`), or one of the GuacaMol goal-directed benchmarks (e.g., `"celecoxib_rediscovery"`, `"osimertinib_mpo"`).
+* `objective_type`: Sets the target objective (e.g., `"kinase_mpo"` or `"jnk3"`, both scored with TDC oracles, or `"prodrug_bbb"`).
+* `max_oracle_calls`: Budget of unique molecules scored by the objective during training (default 50000). Training stops when it is used up; set to `None` for no limit.
 * `use_dr_grpo`: Set to True to enable GRPO reinforcement learning. Set to False to run supervised fine-tuning.  
 * `use_fragment_library`: Master switch for structural conditioning (scaffold-based generation).
 * `use_grpo_grouping`: If True (GRPO), each starting structure is its own group with its own baseline. Set to False to pool all trajectories of an epoch into a single group with one global baseline, which gives REINFORCE. For plain REINFORCE also keep `rl_advantage_normalize = False` and `ppo_epochs = 1`.
@@ -101,5 +102,7 @@ Results, model checkpoints, and logs are saved to the `results` directory by def
 * `best_model.pt` and `last_model.pt` weights.  
 * CSV logs generated during evaluation (`<validation|test>_detailed_logs.csv`), containing starting SMILES, generated SMILES, and objective scores.
 * Text files logging the top generated molecules per epoch (`epoch_<n>_train_top_20_molecules.txt`) and the best molecules found overall (`top10_all_time_smiles.txt`).
+* `oracle_history.csv`: every unique molecule scored during training (canonical SMILES, in the order of the oracle calls) with its score. Duplicates are scored and counted only once.
+* `pmo_top10_curve.csv`: the mean of the current top-10 scores each time it changed, together with the number of unique oracle calls so far.
 
-If `use_wandb` is enabled, per-epoch training metrics (e.g., rewards, advantages, policy loss, number of unique oracle calls) and validation scores are logged to the W&B project set by `wandb_project` / `wandb_entity` in `config.py`.
+If `use_wandb` is enabled, per-epoch training metrics (e.g., rewards, advantages, policy loss, number of unique oracle calls, top-10 mean and top-10 AUC over oracle calls) and validation scores are logged to the W&B project set by `wandb_project` / `wandb_entity` in `config.py`.

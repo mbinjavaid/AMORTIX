@@ -25,7 +25,8 @@ import wandb
 from config import MoleculeConfig
 from core.gumbeldore_dataset import GumbeldoreDataset
 from model.molecule_transformer import MoleculeTransformer, dict_to_cpu
-from molecule_evaluator import MoleculeObjectiveEvaluator, OracleTracker
+from molecule_evaluator import MoleculeObjectiveEvaluator
+from utils.oracle_tracking import OracleTracker
 from rl_updates import dr_grpo_update, TrajectoryRecord
 
 os.environ["RAY_raylet_start_wait_time_s"] = "120"  # Increase from default 60s
@@ -979,7 +980,7 @@ if __name__ == '__main__':
     print(ray.available_resources())
 
     # Create the Global Oracle Tracker Actor
-    oracle_tracker = OracleTracker.remote()
+    oracle_tracker = OracleTracker.remote(results_dir=config.results_path, max_budget=config.max_oracle_calls)
 
     logger = Logger(args, config.results_path, config.log_to_file)
     logger.log_hyperparams(config)
@@ -1052,8 +1053,7 @@ if __name__ == '__main__':
 
     # Policy network
     network = MoleculeTransformer(config, config.training_device)
-    objective_eval = MoleculeObjectiveEvaluator(config, device=config.objective_gnn_device,
-                                                oracle_tracker=oracle_tracker)
+    objective_eval = MoleculeObjectiveEvaluator(config, device=config.objective_gnn_device)
 
     # Load checkpoint if needed
     if config.load_checkpoint_from_path is not None:
@@ -1124,6 +1124,12 @@ if __name__ == '__main__':
             print("------")
             network_weights = copy.deepcopy(network.get_weights())
 
+            # Stop once the oracle budget (unique molecules scored by the objective) is used up
+            calls_so_far, _ = ray.get(oracle_tracker.get_budget_status.remote())
+            if config.max_oracle_calls is not None and calls_so_far >= config.max_oracle_calls:
+                print(f">> Oracle budget of {config.max_oracle_calls} unique calls reached. Stopping training.")
+                break
+
             if novelty_memory is not None:
                 print(f"Start of Epoch {epoch + 1}: Novelty memory contains {len(novelty_memory)} unique SMILES.")
 
@@ -1142,7 +1148,9 @@ if __name__ == '__main__':
                 )
                 val_metric = generated_loggable_dict["best_gen_obj"]
 
-            print("Num Unique Oracle Calls so far: ", generated_loggable_dict["num_unique_oracle_calls"])
+            oracle_stats = ray.get(oracle_tracker.get_stats.remote())
+            print("Num Unique Oracle Calls so far: ", generated_loggable_dict["num_unique_oracle_calls"],
+                  "| top-10 avg: ", oracle_stats["top10_avg"], "| top-10 AUC: ", oracle_stats["pmo_auc"])
 
             # --- [NEW] VALIDATION STEP ---
             current_val_mean_score = float("-inf")
@@ -1231,6 +1239,9 @@ if __name__ == '__main__':
                     generated_loggable_dict["num_unique_oracle_calls"] = count
 
                 wandb_log["num_unique_oracle_calls"] = generated_loggable_dict["num_unique_oracle_calls"]
+                wandb_log["oracle_top10_avg"] = oracle_stats["top10_avg"]
+                wandb_log["oracle_top10_auc"] = oracle_stats["pmo_auc"]
+                wandb_log["oracle_best_score"] = oracle_stats["best_score"]
 
                 if config.use_validation_for_ckpt and not config.prodrug_mode:
                     wandb_log["validation_mean_score"] = current_val_mean_score
