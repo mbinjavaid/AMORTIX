@@ -16,8 +16,8 @@ from objective_predictor.Prodrug.bbb_obj import BBBObjective
 from objective_predictor.tdc.jnk import JNK3Objective
 from objective_predictor.tdc.kinase_mpo import KinaseMPOObjective
 from objective_predictor.tdc.guacamol_hard import GuacaMolHardObjective
+from objective_predictor.tdc.tdc_task import TDCTaskObjective, TDC_TASKS, resolve_task_name
 
-from guacamol.benchmark_suites import goal_directed_suite_v2
 
 @ray.remote
 class PredictorWorker:
@@ -193,30 +193,9 @@ class MoleculeObjectiveEvaluator:
             task_name = self.config.objective_type.replace('guacamol_', '')
             self.guacamol_objective = GuacaMolHardObjective(task_name=task_name)
 
-        # initialize GuacaMol benchmarks
-        guacamol_goal_directed_suite = goal_directed_suite_v2()
-        self.guacamol_benchmarks = dict(
-            celecoxib_rediscovery=guacamol_goal_directed_suite[0],
-            troglitazone_rediscovery=guacamol_goal_directed_suite[1],
-            thiothixene_rediscovery=guacamol_goal_directed_suite[2],
-            aripiprazole_similarity=guacamol_goal_directed_suite[3],
-            albuterol_similarity=guacamol_goal_directed_suite[4],
-            mestranol_similarity=guacamol_goal_directed_suite[5],
-            isomers_c11h24=guacamol_goal_directed_suite[6],
-            isomers_c9h10n2o2pf2cl=guacamol_goal_directed_suite[7],
-            median_camphor_menthol=guacamol_goal_directed_suite[8],
-            median_tadalafil_sildenafil=guacamol_goal_directed_suite[9],
-            osimertinib_mpo=guacamol_goal_directed_suite[10],
-            fexofenadine_mpo=guacamol_goal_directed_suite[11],
-            ranolazine_mpo=guacamol_goal_directed_suite[12],
-            perindopril_rings=guacamol_goal_directed_suite[13],
-            amlodipine_rings=guacamol_goal_directed_suite[14],
-            sitagliptin_replacement=guacamol_goal_directed_suite[15],
-            zaleplon_mpo=guacamol_goal_directed_suite[16],
-            valsartan_smarts=guacamol_goal_directed_suite[17],
-            deco_hop=guacamol_goal_directed_suite[18],
-            scaffold_hop=guacamol_goal_directed_suite[19]
-        )
+        # Other TDC oracle tasks (e.g., celecoxib_rediscovery, zaleplon_mpo, qed)
+        if resolve_task_name(getattr(self.config, 'objective_type', '')) in TDC_TASKS:
+            self.tdc_task_objective = TDCTaskObjective(self.config.objective_type)
 
     def predict_objective(self, molecule_designs: List[Union[MoleculeDesign, str]]) -> np.array:
         """
@@ -339,12 +318,9 @@ class MoleculeObjectiveEvaluator:
                 objs.append(score)
             objs = np.array(objs)
 
-        elif self.config.objective_type in self.guacamol_benchmarks:
-            # Drug design tasks
+        elif hasattr(self, 'tdc_task_objective'):
             objs = np.array([
-                self.guacamol_benchmarks[self.config.objective_type].objective.score(
-                    Chem.MolToSmiles(rdkit_mol)
-                )
+                self.tdc_task_objective.score(Chem.MolToSmiles(rdkit_mol))
                 for rdkit_mol in feasible_molecules
             ])
 

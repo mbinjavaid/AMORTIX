@@ -70,7 +70,7 @@ The framework is controlled via configuration files and command-line arguments. 
 
 Key variables in `config.py`:
 
-* `objective_type`: Sets the target objective (e.g., `"kinase_mpo"` or `"jnk3"`, both scored with TDC oracles, or `"prodrug_bbb"`).
+* `objective_type`: Sets the target objective (`"kinase_mpo"`, `"jnk3"`, `"prodrug_bbb"`, or any other task of the TDC oracle collection, e.g., `"drd2"`, `"celecoxib_rediscovery"`, `"zaleplon_mpo"`).
 * `max_oracle_calls`: Budget of unique molecules scored by the objective during training (default 50000). Training stops when it is used up; set to `None` for no limit.
 * `use_dr_grpo`: Set to True to enable GRPO reinforcement learning. Set to False to run supervised fine-tuning.  
 * `use_fragment_library`: Master switch for structural conditioning (scaffold-based generation).

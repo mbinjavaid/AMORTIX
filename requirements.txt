@@ -1,6 +1,5 @@
 beautifulsoup4==4.14.3
 dgl==2.2.1
-guacamol==0.5.5
 matplotlib==3.10.8
 mordred==1.2.0
 numpy==2.4.2
