@@ -15,3 +15,6 @@ torch==2.8.0+cu129
 torch_geometric==2.7.0
 torch_scatter==2.1.2+pt28cu129
 tqdm==4.67.1
+PyTDC==1.0.0
+setuptools<81
+wandb

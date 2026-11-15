@@ -260,6 +260,12 @@ class MoleculeConfig:
         self.prodrug_parent_smiles = None  # Will be set during training
         self.prodrug_log_components = True  # Log individual components of prodrug objective
 
+        # Baseline / grouping:
+        #   use_grpo_grouping=True  -> GRPO: one baseline (group mean) per prompt, advantage = reward - group mean.
+        #   use_grpo_grouping=False -> REINFORCE: all trajectories of an epoch are pooled into one group, i.e. a single
+        #                              global batch-mean baseline.
+        # For plain REINFORCE additionally keep rl_advantage_normalize=False and ppo_epochs=1.
+        # With a single start prompt per epoch (see run_pmo.py) both settings give the same update.
         self.use_grpo_grouping = True  # If True, treats each parent as a separate group in GRPO
         self.max_oracle_calls = None  # Optional limit on oracle calls during training
 
