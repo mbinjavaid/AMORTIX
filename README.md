@@ -6,7 +6,7 @@ This approach normalizes rewards relative to the starting structure, stabilizing
 
 ## **Installation**
 
-Install the dependencies found in requirements.txt:
+Install the dependencies found in requirements.txt (this includes PyTDC for the TDC objectives and wandb for optional logging):
 
 `pip install -r requirements.txt`
 
@@ -18,7 +18,7 @@ Create the required directories:
 
 ## Pretraining
 
-You can pretrain youself or use the provided pretrained checkpoint.
+You can pretrain yourself or use the provided pretrained checkpoint.
 
 ### Pretrained checkpoint download
 
@@ -31,7 +31,7 @@ You can use this checkpoint for fine-tuning on downstream tasks by specifying th
 
 To pretrain with the settings in the paper, do the following: 
 
-1. Download the file `chembl_35_chemreps.txt.gz` from this this link: [Download File](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_35/chembl_35_chemreps.txt.gz)
+1. Download the file `chembl_35_chemreps.txt.gz` from this link: [Download File](https://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/releases/chembl_35/chembl_35_chemreps.txt.gz)
 and put the extracted `chembl_35_chemreps.txt` under the `./data/chembl` directory.
 2. Run `$ python filter_molecules.py`. This will perform a train/val split with 100k validation molecules, which will be
 put under `data/chembl/chembl_{train/valid}.smiles`. Then, depending on the allowed vocabulary (see `filter_molecules.py`),
@@ -52,15 +52,17 @@ if __name__ == '__main__':
     num_dataloader_workers = 10  # Number of dataloader workers for creating batches for training
     load_checkpoint_from_path = None   # Path to checkpoint if training should be continued from existing weights.
 ```
-4. The terminal output will show under which subdirectory (named after timestamp) in `./results` the script will save the model checkpoints.
+5. The terminal output will show under which subdirectory (named after timestamp) in `./results` the script will save the model checkpoints.
 
-5. After pretraining, the best model checkpoint (lowest validation loss) will be saved as `best_model.pt` in the corresponding subdirectory in `./results`. You can use this checkpoint for fine-tuning on downstream tasks by specifying the path to the checkpoint in `config.py` (in variable `load_checkpoint_from_path`).
+6. After pretraining, the best model checkpoint (lowest validation loss) will be saved as `best_model.pt` in the corresponding subdirectory in `./results`. You can use this checkpoint for fine-tuning on downstream tasks by specifying the path to the checkpoint in `config.py` (in variable `load_checkpoint_from_path`).
 
 ## **Data Preparation**
 
 Before running scaffold-constrained tasks, generate the cluster-based scaffold splits from the ZINC dataset to evaluate generalization to out-of-distribution scaffolds.
 
-`python scaffold_splitting/zinc_splits/smart_splitting.py`
+`cd scaffold_splitting && python smart_splitting.py`
+
+The script reads `data/zinc/zinc.smiles` and writes `train_scaffolds.txt`, `val_scaffolds.txt` and `test_scaffolds.txt` for each split seed into `scaffold_splitting/zinc_splits_optimized/run_seed_<seed>/`. Point `fragment_library_path`, `validation_scaffolds_path` and `evaluation_scaffolds_path` in `config.py` to these files.
 
 ## **Usage and Configuration**
 
@@ -68,9 +70,11 @@ The framework is controlled via configuration files and command-line arguments. 
 
 Key variables in `config.py`:
 
-* `objective_type`: Sets the target objective (e.g., `"kinase_mpo"`, `"prodrug_bbb"`).
+* `objective_type`: Sets the target objective: `"kinase_mpo"`, `"jnk3"`, `"prodrug_bbb"`, the hard GuacaMol tasks (`"guacamol_<task>"`), or one of the GuacaMol goal-directed benchmarks (e.g., `"celecoxib_rediscovery"`, `"osimertinib_mpo"`).
 * `use_dr_grpo`: Set to True to enable GRPO reinforcement learning. Set to False to run supervised fine-tuning.  
 * `use_fragment_library`: Master switch for structural conditioning (scaffold-based generation).
+* `use_grpo_grouping`: If True (GRPO), each starting structure is its own group with its own baseline. Set to False to pool all trajectories of an epoch into a single group with one global baseline, which gives REINFORCE. For plain REINFORCE also keep `rl_advantage_normalize = False` and `ppo_epochs = 1`.
+* `use_wandb`: Set to True to log to Weights & Biases (off by default). Set `wandb_project` and `wandb_entity` accordingly.
 
 ### **Running an Experiment**
 
@@ -82,6 +86,10 @@ To use a different configuration module (e.g., a subclass of `MoleculeConfig` in
 
 `python main.py --config my_config`
 
+To evaluate a trained checkpoint without retraining:
+
+`python evaluate_checkpoint.py --checkpoint results/<timestamp>/best_model.pt`
+
 You can also override specific RL hyperparameters directly via the command line:
 
 `python main.py --learning_rate 1e-4 --rl_entropy_beta 0.001 --ppo_epochs 1 --rl_ppo_clip_epsilon 0.2`
@@ -91,5 +99,7 @@ You can also override specific RL hyperparameters directly via the command line:
 Results, model checkpoints, and logs are saved to the `results` directory by default:
 
 * `best_model.pt` and `last_model.pt` weights.  
-* CSV logs generated during testing, containing starting SMILES, generated SMILES, and objective scores.
-* Text files logging the top generated molecules per epoch.
+* CSV logs generated during evaluation (`<validation|test>_detailed_logs.csv`), containing starting SMILES, generated SMILES, and objective scores.
+* Text files logging the top generated molecules per epoch (`epoch_<n>_train_top_20_molecules.txt`) and the best molecules found overall (`top10_all_time_smiles.txt`).
+
+If `use_wandb` is enabled, per-epoch training metrics (e.g., rewards, advantages, policy loss, number of unique oracle calls) and validation scores are logged to the W&B project set by `wandb_project` / `wandb_entity` in `config.py`.

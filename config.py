@@ -1,6 +1,5 @@
 import os
 import datetime
-import platform
 import uuid
 
 uid = uuid.uuid4().hex
@@ -265,16 +264,12 @@ class MoleculeConfig:
         #   use_grpo_grouping=False -> REINFORCE: all trajectories of an epoch are pooled into one group, i.e. a single
         #                              global batch-mean baseline.
         # For plain REINFORCE additionally keep rl_advantage_normalize=False and ppo_epochs=1.
-        # With a single start prompt per epoch (see run_pmo.py) both settings give the same update.
+        # With a single start prompt per epoch both settings give the same update.
         self.use_grpo_grouping = True  # If True, treats each parent as a separate group in GRPO
         self.max_oracle_calls = None  # Optional limit on oracle calls during training
 
         # --- WandB Logging ---
-        self.use_wandb = 'auto'  # Master switch for WandB logging
+        self.use_wandb = False  # Master switch for WandB logging
         self.wandb_project = "graphxform-rl-paper"
         self.wandb_entity = ""  # wandb username or team name
         self.wandb_run_name = f"Case1_DeNovo_{self.objective_type}_Seed{self.seed}"
-
-        # Resolve "auto" setting based on OS
-        if self.use_wandb == "auto":
-            self.use_wandb = platform.system() == "Linux"
