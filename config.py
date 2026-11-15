@@ -263,6 +263,6 @@ class MoleculeConfig:
 
         # --- WandB Logging ---
         self.use_wandb = False  # Master switch for WandB logging
-        self.wandb_project = "graphxform-rl-paper"
+        self.wandb_project = ""
         self.wandb_entity = ""  # wandb username or team name
-        self.wandb_run_name = f"Case1_DeNovo_{self.objective_type}_Seed{self.seed}"
+        self.wandb_run_name = ""

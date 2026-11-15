@@ -20,9 +20,9 @@ class Logger:
         self.use_wandb = config.use_wandb if config and hasattr(config, 'use_wandb') else False
         if self.use_wandb and config:
             wandb.init(
-                project=config.wandb_project,
-                entity=config.wandb_entity,
-                name=config.wandb_run_name,
+                project=config.wandb_project or None,
+                entity=config.wandb_entity or None,
+                name=config.wandb_run_name or None,
                 config=self._extract_config_dict(config),
                 settings=wandb.Settings(_disable_stats=True, _disable_meta=True)
             )

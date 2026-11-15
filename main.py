@@ -932,9 +932,9 @@ if __name__ == '__main__':
                 flat_config[k] = v
 
         wandb.init(
-            project=config.wandb_project,
-            entity=config.wandb_entity,
-            name=config.wandb_run_name,
+            project=config.wandb_project or None,
+            entity=config.wandb_entity or None,
+            name=config.wandb_run_name or None,
             config=flat_config
         )
 

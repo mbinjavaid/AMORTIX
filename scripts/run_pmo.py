@@ -60,7 +60,7 @@ def parse_args():
     p.add_argument("--gpu", default=None, help="GPU id to use (sets CUDA_VISIBLE_DEVICES). Default: config.py value.")
     p.add_argument("--results_root", default="./results/pmo")
     p.add_argument("--no_wandb", action="store_true")
-    p.add_argument("--wandb_project", default="amortix-pmo")
+    p.add_argument("--wandb_project", default="")
     p.add_argument("--wandb_entity", default=None)
     p.add_argument("--list_tasks", action="store_true")
     return p.parse_args()
@@ -162,7 +162,7 @@ def run_single(args, task, seed):
     use_wandb = not args.no_wandb
     if use_wandb:
         import wandb
-        wandb.init(project=args.wandb_project, entity=args.wandb_entity, name=f"{task}_seed{seed}",
+        wandb.init(project=args.wandb_project or None, entity=args.wandb_entity, name=f"{task}_seed{seed}",
                    config=dict(task=task, seed=seed, max_calls=args.max_calls, entropy=entropy,
                                lr=config.optimizer["lr"], search_type="iid_mc",
                                samples_per_epoch=args.samples_per_epoch, keep_per_epoch=args.keep_per_epoch,
